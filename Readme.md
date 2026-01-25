@@ -1,16 +1,16 @@
-# Bonobo Engine 🐵
+# Bonobo Engine
 
 **Modern JavaScript Game Engine with a Retro Soul.**
 
 Bonobo is the spiritual successor to [jBB](https://github.com/Farbfinsternis/jBB). It aims to bring back the fun and simplicity of coding in **BlitzBasic** (Amiga/PC), but built on a robust, modern web architecture.
 
-## 🚀 Philosophy
+## Philosophy
 
 *   **Retro Feeling:** Write code that feels like 1995. Simple commands like `cls()`, `rect()`, and `load()` let you focus on the game, not the boilerplate.
 *   **Modern Tech:** Under the hood, Bonobo uses ES Modules, Classes, Async/Await, and the Web Audio API.
 *   **Modular:** Only load what you need. The core is slim; features like Tilemaps or Sprites (BOBs) are optional modules.
 
-## ✨ Features
+## Features
 
 *   **Core Architecture:**
     *   Modular plugin system.

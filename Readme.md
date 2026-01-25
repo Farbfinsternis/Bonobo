@@ -65,29 +65,3 @@ function loop(){
 *   `/examples`: Sample projects.
 ```
 
-### 2. Wie du das Repo updatest
-
-Da du jetzt Änderungen hast (die neue README und die Anpassungen an den Modulen), musst du diese an GitHub senden. Das ist der Standard-Workflow, den du ab jetzt immer machst:
-
-1.  **Terminal öffnen** (in `g:\dev\projects\bonobo`).
-2.  **Dateien hinzufügen:**
-   Damit sagst du Git: "Merk dir alle Änderungen in allen Dateien".
-   ```bash
-   git add .
-   ```
-3.  **Commit erstellen:**
-   Damit verpackst du die Änderungen in ein Paket mit einem Namen.
-   ```bash
-   git commit -m "Add README and TileMap module"
-   ```
-4.  **Hochladen (Push):**
-   Damit schiebst du das Paket auf den GitHub-Server.
-   ```bash
-   git push
-   ```
-
-Das war's! Wenn du jetzt auf deine GitHub-Seite gehst, siehst du die neue README schön formatiert auf der Startseite.
-
-<!--
-[PROMPT_SUGGESTION]Wie kann ich GitHub Pages aktivieren, damit man die Beispiele direkt im Browser spielen kann?[/PROMPT_SUGGESTION]
-[PROMPT_SUGGESTION]Lass uns ein einfaches Partikel-System bauen, um Explosionen darzustellen.[/PROMPT_SUGGESTION]

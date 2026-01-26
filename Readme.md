@@ -37,7 +37,7 @@ Bonobo is the spiritual successor to [jBB](https://github.com/Farbfinsternis/jBB
     *   Math helper (BlitzBasic style `Rand`, `Int`, `Float`).
     *   Collision detection (AABB & Pixel-Perfect).
 
-## 🛠️ Getting Started
+## Getting Started
 
 Check out the `examples/simple/game.js` to see Bonobo in action.
 
@@ -54,7 +54,7 @@ function loop(){
 }
 ```
 
-## 📂 Structure
+## Structure
 
 *   `/lib`: The core engine code (`bonobo.js`, `utils.js`).
 *   `/modules`: Feature modules.

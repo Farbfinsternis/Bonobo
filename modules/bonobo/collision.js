@@ -102,6 +102,23 @@ export class Collision{
     }
 
     /**
+     * Checks if an image overlaps with a specific rectangle.
+     * @param {object} img The image/BOB.
+     * @param {number} x X-pos of image.
+     * @param {number} y Y-pos of image.
+     * @param {number} rectX X-pos of rectangle.
+     * @param {number} rectY Y-pos of rectangle.
+     * @param {number} rectW Width of rectangle.
+     * @param {number} rectH Height of rectangle.
+     * @returns {boolean} True if overlapping.
+     */
+    imageRectCollide(img, x, y, rectX, rectY, rectW, rectH){
+        if (!img || !img.loaded) return false;
+        const box = this.getBoundingBox(img, x, y);
+        return this.rectsOverlap(box.x, box.y, box.width, box.height, rectX, rectY, rectW, rectH);
+    }
+
+    /**
      * Helper to extract pixel data from ImageBitmap (cached).
      * @private
      */

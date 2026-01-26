@@ -20,7 +20,6 @@ export class Graphics{
      */
 	initCanvas(width, height){
 		this.canvasData.element = document.createElement("canvas");
-		this.canvasData.element.style.cursor = "none";
 
         if(width === "*"){
             this.canvasData.element.width = window.innerWidth;
@@ -40,8 +39,11 @@ export class Graphics{
 		this.canvasData.context = this.canvasData.element.getContext("2d");
 		this.canvasData.clsColor = "rgba(0,0,0,1)";
 		this.canvasData.drawColor = "rgba(255,255,255,1)";
+        this.canvasData.colorValues = { r: 255, g: 255, b: 255, a: 1 };
+        this.canvasData.origin = { x: 0, y: 0 };
 
 		this.bonobo.canvasToDOM(this.canvasData.element);
+        this.canvasData.context.save(); // Save initial clean state for Viewport resets
 	}
 
 	get canvasContext(){
@@ -54,68 +56,5 @@ export class Graphics{
 
 	get height(){
 		return this.canvasData.element.height;
-	}
-
-    /**
-     * Sets the clear color (background color).
-     * @param {number} r Red (0-255).
-     * @param {number} g Green (0-255).
-     * @param {number} b Blue (0-255).
-     * @param {number} [a=1] Alpha (0-1).
-     */
-	clsColor(r = 0, g = 0, b = 0, a = 1){
-		this.canvasData.clsColor = `rgba(${r}, ${g}, ${b}, ${a})`;
-	}
-
-    /**
-     * Sets the current drawing color.
-     * @param {number} r Red (0-255).
-     * @param {number} g Green (0-255).
-     * @param {number} b Blue (0-255).
-     * @param {number} [a=1] Alpha (0-1).
-     */
-	color(r = 255, g = 255, b = 255, a = 1){
-		this.canvasData.drawColor = `rgba(${r}, ${g}, ${b}, ${a})`;
-		this.canvasData.context.fillStyle = this.canvasData.drawColor;
-		this.canvasData.context.strokeStyle = this.canvasData.drawColor;
-	}
-
-    /**
-     * Clears the screen with the set clear color.
-     */
-	cls(){
-		this.canvasData.context.fillStyle = this.canvasData.clsColor;
-		this.canvasData.context.fillRect(0, 0, this.canvasData.element.width, this.canvasData.element.height);
-		this.canvasData.context.fillStyle = this.canvasData.drawColor;
-	}
-
-    /**
-     * Draws a rectangle.
-     * @param {number} x X-coordinate.
-     * @param {number} y Y-coordinate.
-     * @param {number} w Width.
-     * @param {number} h Height.
-     * @param {boolean} [filled=true] Whether to fill the rectangle.
-     */
-	rect(x, y, w, h, filled = true){
-		if(filled){
-			this.canvasData.context.fillRect(x, y, w, h);
-		}else{
-			this.canvasData.context.strokeRect(x, y, w, h);
-		}
-	}
-
-    /**
-     * Draws a line.
-     * @param {number} x1 Start X.
-     * @param {number} y1 Start Y.
-     * @param {number} x2 End X.
-     * @param {number} y2 End Y.
-     */
-	line(x1, y1, x2, y2){
-		this.canvasData.context.beginPath();
-		this.canvasData.context.moveTo(x1, y1);
-		this.canvasData.context.lineTo(x2, y2);
-		this.canvasData.context.stroke();
 	}
 }

@@ -103,12 +103,12 @@ export class Files{
 		}
 	}
 
+	/**
+	 * Gets the current read/write position in an open file.
+	 * @param {number} handle The file handle.
+	 * @returns {number} The current position (cursor) in the file.
+	 */
 	filePos(handle) {
-		/**
-		 * Gets the current read/write position in an open file.
-		 * @param {number} handle The file handle.
-		 * @returns {number} The current position (cursor) in the file.
-		 */
 		const file = this.#openFiles[handle];
 		return file ? file.pos : 0;
 	}
@@ -165,16 +165,29 @@ export class Files{
 		return '';
 	}
 
+	/**
+	 * Closes an open directory handle.
+	 * @param {number} handle The directory handle.
+	 */
 	closeDir(handle) {
 		if (this.#openDirs[handle]) {
 			this.#openDirs[handle] = null;
 		}
 	}
 
+	/**
+	 * Returns the current working directory.
+	 * @returns {string} The current directory path.
+	 */
 	currentDir() {
 		return this.#currentDir;
 	}
 
+	/**
+	 * Changes the current working directory.
+	 * @param {string} path The new directory path.
+	 * @returns {boolean} True on success, false if directory does not exist.
+	 */
 	changeDir(path) {
 		const resolved = this.vfs.resolvePath(path, this.#currentDir);
 		if (resolved && resolved.node && resolved.node.type === 'directory') {
@@ -185,6 +198,11 @@ export class Files{
 		return false;
 	}
 
+	/**
+	 * Creates a new directory.
+	 * @param {string} path The path of the directory to create.
+	 * @returns {Promise<boolean>} True on success, false on failure.
+	 */
 	async createDir(path) {
 		const resolved = this.vfs.resolvePath(path, this.#currentDir, true);
 		if (!resolved || !resolved.parent) return false;

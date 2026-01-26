@@ -26,6 +26,7 @@ Bonobo is the spiritual successor to [jBB](https://github.com/Farbfinsternis/jBB
     *   Primitives (Rects, Lines, Colors).
 
 *   **Input:**
+    *   **Hybrid Input:** Seamlessly switch between Mouse, Keyboard, and Gamepad on the fly.
     *   **Keyboard:** With `keyDown` (continuous) and `keyHit` (one-shot) support.
     *   **Mouse:** Position tracking and button states.
     *   **Gamepad (Joy):** Full Gamepad API support with deadzones.
@@ -37,7 +38,7 @@ Bonobo is the spiritual successor to [jBB](https://github.com/Farbfinsternis/jBB
     *   Math helper (BlitzBasic style `Rand`, `Int`, `Float`).
     *   Collision detection (AABB & Pixel-Perfect).
 
-## Getting Started
+## 🛠️ Getting Started
 
 Check out the `examples/simple/game.js` to see Bonobo in action.
 
@@ -54,7 +55,7 @@ function loop(){
 }
 ```
 
-## Structure
+## 📂 Structure
 
 *   `/lib`: The core engine code (`bonobo.js`, `utils.js`).
 *   `/modules`: Feature modules.
@@ -64,4 +65,3 @@ function loop(){
     *   `/assets`: Asset management.
 *   `/examples`: Sample projects.
 ```
-

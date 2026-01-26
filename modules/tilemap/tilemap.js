@@ -25,6 +25,11 @@ export class TileMap{
         return this;
     }
 
+    /**
+     * Loads tileset images defined in the map data.
+     * @private
+     * @param {string} mapPath The base path of the map file.
+     */
     async _loadTilesets(mapPath){
         const basePath = mapPath.substring(0, mapPath.lastIndexOf('/') + 1);
         

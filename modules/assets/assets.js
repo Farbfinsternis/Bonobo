@@ -11,6 +11,13 @@ export class AssetsManager{
         this.bonobo.utils.loadFile = this._trackedLoadFile.bind(this);
     }
 
+    /**
+     * Internal wrapper to track file loading progress.
+     * @private
+     * @param {string} path 
+     * @param {string} loadAs 
+     * @returns {Promise<any>}
+     */
     async _trackedLoadFile(path, loadAs){
         this.total++;
         try{

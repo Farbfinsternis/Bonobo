@@ -28,7 +28,7 @@ export const init = (bonobo, width = 640, height = 480) => {
         mouse: new Mouse(bonobo),
         sound: new Sound(bonobo),
         font: new Font(bonobo),
-        file: new Files(bonobo),
+        files: new Files(bonobo),
         collision: new Collision(bonobo),
         joy: new Joy(bonobo),
         math: new Maths(bonobo),

@@ -5,13 +5,14 @@ import * as $ from "../../modules/bonobo/bonobo-modules.js";
 import { Bob } from "../../modules/bobs/bob.js";
 import { AssetsManager } from "../../modules/assets/assets.js";
 import { TileMap } from "../../modules/tilemap/tilemap.js";
+import { InputManager } from "../../modules/input/input-manager.js";
 
 // --- GLOBAL VARIABLES ---
 // variables for Bonobo modules
-let bonobo, keys, mouse, gfx, bob, sound, font, assets, collision, joy, map, draw, file;
+let bonobo, keys, mouse, gfx, bob, sound, font, assets, collision, joy, map, draw, files, input;
 
 // variables for our game
-let ship, enemy, shootSnd, bulletImg, fnt, lastShot = 0, bullets = [], explosions = [];
+let ship, enemy, shootSnd, bgMusic, bulletImg, fnt, lastShot = 0, bullets = [], explosions = [];
 let state = "MENU"; // MENU, GAME, GAMEOVER
 let score = 0;
 let highScore = 0;
@@ -26,10 +27,41 @@ async function main(){
 
     // 2. Initialize the modules
     // Use the helper to init all core modules at once
-    ({ keys, mouse, gfx, draw, sound, font, collision, joy, file } = $.init(bonobo, "*"));
+    const modules = $.init(bonobo, "*");
+    Object.assign(bonobo, modules); // Make modules accessible via bonobo instance (required for InputManager)
+    ({ keys, mouse, gfx, draw, sound, font, collision, joy, files } = modules);
     
     bob = new Bob(bonobo);
     map = new TileMap(bonobo);
+    input = new InputManager(bonobo);
+
+    // --- INPUT MAPPING ---
+    // Define abstract actions and bind them to hardware
+    
+    // Movement (Left/Right/Up/Down)
+    input.bind("MoveLeft", "KEY", "KEY_LEFT");
+    input.bind("MoveLeft", "JOY_AXIS", { axis: 0, dir: -1 });
+    input.bind("MoveLeft", "MOUSE_AXIS", { axis: "x", dir: -1, sens: 0.5 });
+
+    input.bind("MoveRight", "KEY", "KEY_RIGHT");
+    input.bind("MoveRight", "JOY_AXIS", { axis: 0, dir: 1 });
+    input.bind("MoveRight", "MOUSE_AXIS", { axis: "x", dir: 1, sens: 0.5 });
+
+    input.bind("MoveUp", "KEY", "KEY_UP");
+    input.bind("MoveUp", "JOY_AXIS", { axis: 1, dir: -1 });
+    input.bind("MoveUp", "MOUSE_AXIS", { axis: "y", dir: -1, sens: 0.5 });
+
+    input.bind("MoveDown", "KEY", "KEY_DOWN");
+    input.bind("MoveDown", "JOY_AXIS", { axis: 1, dir: 1 });
+    input.bind("MoveDown", "MOUSE_AXIS", { axis: "y", dir: 1, sens: 0.5 });
+
+    // Actions
+    input.bind("Fire", "KEY", "KEY_SPACEBAR");
+    input.bind("Fire", "JOY_BTN", 0);
+    input.bind("Fire", "MOUSE_BTN", 0);
+
+    input.bind("Confirm", "KEY", "KEY_SPACEBAR");
+    input.bind("Confirm", "JOY_BTN", 0);
 
     // Configure
     bob.autoMidHandle(true);
@@ -49,12 +81,13 @@ async function main(){
     }
     enemy.image.scaleY = -1; // Mirror the enemy vertically
     shootSnd = sound.load("assets/shoot.wav");
+    bgMusic = sound.loadMusic("assets/Sternenfeuer.mp3");
     bulletImg = bob.load("assets/bullet.png");
 	fnt = font.load("assets/SmoochSans-Bold.ttf", "SmoochSans");
     // map.load("assets/level.json"); // Load map here once one exists
     
     // Load Highscore from VFS
-    const hsData = await file.loadJSON("highscore.json");
+    const hsData = await files.loadJSON("highscore.json");
     if(hsData && hsData.score) highScore = hsData.score;
 
     // 4. Start the engine
@@ -65,6 +98,8 @@ async function main(){
 function loop(){
     // Clear screen
     draw.cls();
+
+    files.dir();
 
     if(!assets.isReady){
         // Draw a simple loading bar
@@ -99,18 +134,20 @@ function updateGame(){
     font.set(fnt, 36);
     font.draw("Score: " + score, 10, 10);
 
-    // Ship Movement (Keyboard + Gamepad)
-    let dx = joy.joyX(0);
-    if(keys.keyDown("KEY_LEFT")) dx = -1;
-    if(keys.keyDown("KEY_RIGHT")) dx = 1;
-    ship.x += dx * 5;
+    // Ship Movement via InputManager
+    ship.x -= input.getValue("MoveLeft") * 5;
+    ship.x += input.getValue("MoveRight") * 5;
+    ship.y -= input.getValue("MoveUp") * 5;
+    ship.y += input.getValue("MoveDown") * 5;
     
     // Clamp ship to screen
     if(ship.x < 0) ship.x = 0;
-    if(ship.x > gfx.width - 32) ship.x = gfx.width - 32;
+    if(ship.x > gfx.width) ship.x = gfx.width;
+    if(ship.y < 0) ship.y = 0;
+    if(ship.y > gfx.height) ship.y = gfx.height;
 
     // Enemy Logic
-    if(joy.joyDown(0) || keys.keyDown("KEY_SPACEBAR")){
+    if(input.isPressed("Fire")){
         if(performance.now() - lastShot > 200){
             sound.playAt(shootSnd, ship.x, ship.y);
             lastShot = performance.now();
@@ -194,7 +231,8 @@ function updateMenu(){
     font.set(fnt, 20);
     font.draw("Highscore: " + highScore, gfx.width/2, gfx.height/2 + 50);
 
-    if(keys.keyHit("KEY_SPACEBAR") || joy.joyHit(0)){
+    if(input.isHit("Confirm")){
+        sound.playMusic(bgMusic, 0.5, true);
         resetGame();
         state = "GAME";
     }
@@ -210,7 +248,7 @@ function updateGameOver(){
     font.draw("Score: " + score, gfx.width/2, gfx.height/2);
     font.draw("Press SPACE to Menu", gfx.width/2, gfx.height/2 + 50);
 
-    if(keys.keyHit("KEY_SPACEBAR") || joy.joyHit(0)){
+    if(input.isHit("Confirm")){
         state = "MENU";
     }
 }
@@ -232,7 +270,7 @@ function setGameOver(){
     if(score > highScore){
         highScore = score;
         // Save new highscore to VFS
-        file.saveJSON("highscore.json", { score: highScore });
+        files.saveJSON("highscore.json", { score: highScore });
     }
 }
 document.addEventListener("DOMContentLoaded", main);

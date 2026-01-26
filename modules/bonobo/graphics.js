@@ -43,6 +43,12 @@ export class Graphics{
         this.canvasData.origin = { x: 0, y: 0 };
 
 		this.bonobo.canvasToDOM(this.canvasData.element);
+
+        // Make canvas focusable and focus it automatically
+        this.canvasData.element.tabIndex = 1;
+        this.canvasData.element.style.outline = "none";
+        this.canvasData.element.focus();
+
         this.canvasData.context.save(); // Save initial clean state for Viewport resets
 	}
 

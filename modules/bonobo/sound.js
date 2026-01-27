@@ -82,6 +82,13 @@ export class Sound{
         source.gainNode = gainNode;
         source.pannerNode = panner;
 
+        // Cleanup nodes when sound finishes to prevent memory leaks
+        source.onended = () => {
+            source.disconnect();
+            gainNode.disconnect();
+            panner.disconnect();
+        };
+
         return source; // Return as "Channel"
     }
 
@@ -184,16 +191,26 @@ export class Sound{
     }
 }
 
+/**
+ * Represents a sound effect asset (SFX).
+ */
 class Snd{
     constructor(){
+        /** @type {AudioBuffer|null} The decoded audio buffer. */
         this.buffer = null;
+        /** @type {boolean} Whether the sound is loaded and ready. */
         this.loaded = false;
     }
 }
 
+/**
+ * Represents a music asset (Streaming).
+ */
 class Mus{
     constructor(){
+        /** @type {HTMLAudioElement|null} The audio element. */
         this.element = null;
+        /** @type {boolean} Whether the music is loaded and ready. */
         this.loaded = false;
     }
 }

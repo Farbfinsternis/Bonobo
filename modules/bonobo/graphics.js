@@ -30,13 +30,14 @@ export class Graphics{
                 this.canvasData.element.height = window.innerHeight;
                 this.canvasData.context.fillStyle = this.canvasData.drawColor;
                 this.canvasData.context.strokeStyle = this.canvasData.drawColor;
+                this.canvasData.context.textBaseline = "top"; // Restore default baseline
             });
         }else{
             this.canvasData.element.width = width;
             this.canvasData.element.height = height;
         }
 
-		this.canvasData.context = this.canvasData.element.getContext("2d");
+		this.canvasData.context = this.canvasData.element.getContext("2d", { willReadFrequently: true });
 		this.canvasData.clsColor = "rgba(0,0,0,1)";
 		this.canvasData.drawColor = "rgba(255,255,255,1)";
         this.canvasData.colorValues = { r: 255, g: 255, b: 255, a: 1 };

@@ -16,6 +16,7 @@ let ship, enemy, shootSnd, bgMusic, bulletImg, fnt, lastShot = 0, bullets = [], 
 let state = "MENU"; // MENU, GAME, GAMEOVER
 let score = 0;
 let highScore = 0;
+let wasLocked = false;
 
 // --- MAIN SETUP ---
 async function main(){
@@ -62,6 +63,12 @@ async function main(){
 
     input.bind("Confirm", "KEY", "KEY_SPACEBAR");
     input.bind("Confirm", "JOY_BTN", 0);
+
+    // Pause / Unlock Mouse
+    input.bind("Pause", "KEY", "KEY_ESC");
+    input.bind("Pause", "KEY", "KEY_P");
+
+    input.setMouseSensitivity(0.3)
 
     // Configure
     bob.autoMidHandle(true);
@@ -121,6 +128,8 @@ function loop(){
         updateMenu();
     } else if(state === "GAME"){
         updateGame();
+    } else if(state === "PAUSED"){
+        updatePaused();
     } else if(state === "GAMEOVER"){
         updateGameOver();
     }
@@ -132,7 +141,23 @@ function updateGame(){
     draw.color(255, 255, 255);
     font.align("left", "top");
     font.set(fnt, 36);
-    font.draw("Score: " + score, 10, 10);
+    draw.text("Score: " + score, 10, 10);
+
+    // UI Hint
+    font.align("right", "top");
+    font.set(fnt, 20);
+    draw.text("ESC: Pause", gfx.width - 10, 10);
+
+    // Check Pause Action or lost focus
+    if(input.isHit("Pause")){
+        mouse.unlockPointer();
+    }
+
+    if(mouse.isLocked) wasLocked = true;
+    if(wasLocked && !mouse.isLocked){
+        state = "PAUSED";
+        wasLocked = false;
+    }
 
     // Ship Movement via InputManager
     ship.x -= input.getValue("MoveLeft") * 5;
@@ -159,7 +184,7 @@ function updateGame(){
     enemy.y += 2 + (score * 0.1); // Increase difficulty
     if(enemy.y > gfx.height + 50){
         enemy.y = -50;
-        enemy.x = Math.random() * (gfx.width - 32);
+        enemy.x = 16 + Math.random() * (gfx.width - 32);
     }
 
     // Update and draw bullets
@@ -185,7 +210,7 @@ function updateGame(){
             }
             
             enemy.y = -50;
-            enemy.x = Math.random() * (gfx.width - 32);
+            enemy.x = 16 + Math.random() * (gfx.width - 32);
             continue;
         }
 
@@ -223,15 +248,16 @@ function updateMenu(){
     font.align("center", "middle");
     
     font.set(fnt, 60, true);
-    font.draw("SPACE SHOOTER", gfx.width/2, gfx.height/3);
+    draw.text("SPACE SHOOTER", gfx.width/2, gfx.height/3);
     
     font.set(fnt, 30);
-    font.draw("Press SPACE to Start", gfx.width/2, gfx.height/2);
+    draw.text("Press SPACE to Start", gfx.width/2, gfx.height/2);
     
     font.set(fnt, 20);
-    font.draw("Highscore: " + highScore, gfx.width/2, gfx.height/2 + 50);
+    draw.text("Highscore: " + highScore, gfx.width/2, gfx.height/2 + 50);
 
     if(input.isHit("Confirm")){
+        mouse.lockPointer();
         sound.playMusic(bgMusic, 0.5, true);
         resetGame();
         state = "GAME";
@@ -242,14 +268,29 @@ function updateGameOver(){
     draw.color(255, 255, 255);
     font.align("center", "middle");
     font.set(fnt, 60, true);
-    font.draw("GAME OVER", gfx.width/2, gfx.height/3);
+    draw.text("GAME OVER", gfx.width/2, gfx.height/3);
     
     font.set(fnt, 30);
-    font.draw("Score: " + score, gfx.width/2, gfx.height/2);
-    font.draw("Press SPACE to Menu", gfx.width/2, gfx.height/2 + 50);
+    draw.text("Score: " + score, gfx.width/2, gfx.height/2);
+    draw.text("Press SPACE to Menu", gfx.width/2, gfx.height/2 + 50);
 
     if(input.isHit("Confirm")){
         state = "MENU";
+    }
+}
+
+function updatePaused(){
+    draw.color(255, 255, 255);
+    font.align("center", "middle");
+    font.set(fnt, 40);
+    draw.text("PAUSED", gfx.width/2, gfx.height/2 - 20);
+    
+    font.set(fnt, 20);
+    draw.text("Click to Resume", gfx.width/2, gfx.height/2 + 30);
+
+    if(input.isHit("Fire") || input.isHit("Confirm")){
+        mouse.lockPointer();
+        state = "GAME";
     }
 }
 
@@ -260,13 +301,15 @@ function resetGame(){
     ship.x = gfx.width / 2 - 16;
     ship.y = gfx.height - 100;
     enemy.y = -50;
-    enemy.x = Math.random() * (gfx.width - 32);
+    enemy.x = 16 + Math.random() * (gfx.width - 32);
+    wasLocked = false;
 }
 
 // Wait for the web page to fully load, then start
 
 function setGameOver(){
     state = "GAMEOVER";
+    mouse.unlockPointer();
     if(score > highScore){
         highScore = score;
         // Save new highscore to VFS

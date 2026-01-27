@@ -103,4 +103,17 @@ export class Joy{
         const val = pad.axes[1];
         return Math.abs(val) > 0.15 ? val : 0.0;
     }
+
+    /**
+     * Gets the value of a specific axis.
+     * @param {number} axis Axis index.
+     * @param {number} [padIndex=0] Gamepad index.
+     * @returns {number} Value between -1.0 and 1.0.
+     */
+    joyAxis(axis, padIndex = 0){
+        const pad = this.#gamepads[padIndex];
+        if (!pad || pad.axes.length <= axis) return 0.0;
+        const val = pad.axes[axis];
+        return Math.abs(val) > 0.15 ? val : 0.0;
+    }
 }

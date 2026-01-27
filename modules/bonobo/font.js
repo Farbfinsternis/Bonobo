@@ -52,17 +52,6 @@ export class Font{
     }
 
     /**
-     * Draws text at the specified coordinates.
-     * @param {string} text The text to draw.
-     * @param {number} x X-coordinate.
-     * @param {number} y Y-coordinate.
-     */
-    draw(text, x, y){
-        let ctx = this.bonobo.contextOwner.canvasContext;
-        ctx.fillText(text, x, y);
-    }
-
-    /**
      * Measures the width of the given text.
      * @param {string} text The text to measure.
      * @returns {number} The width in pixels.
@@ -84,7 +73,13 @@ export class Font{
     }
 }
 
+/**
+ * Represents a loaded font asset.
+ */
 class FontAsset{
+    /**
+     * @param {string} name The font family name.
+     */
     constructor(name){
         this.name = name;
         this.loaded = false;

@@ -12,6 +12,7 @@ export class InputManager{
         this.bonobo = bonobo;
         /** @type {Object.<string, Array<object>>} Stores actions and their bindings. */
         this.actions = {};
+        this.mouseSensitivity = 1.0;
     }
 
     /**
@@ -22,6 +23,14 @@ export class InputManager{
         if(!this.actions[name]) {
             this.actions[name] = [];
         }
+    }
+
+    /**
+     * Sets the global mouse sensitivity multiplier.
+     * @param {number} factor Multiplier (default 1.0).
+     */
+    setMouseSensitivity(factor){
+        this.mouseSensitivity = factor;
     }
 
     /**
@@ -73,7 +82,7 @@ export class InputManager{
                         const axisVal = (cfg.axis === "y") ? this.bonobo.mouse.ySpeed : this.bonobo.mouse.xSpeed;
                         const dir = cfg.dir || 1;
                         const sens = cfg.sens || 0.1;
-                        val = axisVal * dir * sens;
+                        val = axisVal * dir * sens * this.mouseSensitivity;
                     }
                     break;
 
@@ -89,13 +98,20 @@ export class InputManager{
                 case "JOY_AXIS":
                     // Analog: -1.0 to 1.0
                     if(this.bonobo.joy){
-                        const axisIdx = cfg.axis || 0; // 0=X, 1=Y
+                        const axisIdx = (cfg.axis !== undefined) ? cfg.axis : 0;
                         const padIdx = cfg.pad || 0;
                         const dir = cfg.dir || 1;
                         
                         let raw = 0.0;
-                        if(axisIdx === 1) raw = this.bonobo.joy.joyY(padIdx);
-                        else raw = this.bonobo.joy.joyX(padIdx);
+                        if(typeof this.bonobo.joy.joyAxis === 'function'){
+                            raw = this.bonobo.joy.joyAxis(axisIdx, padIdx);
+                        } else {
+                            if(axisIdx === 1) raw = this.bonobo.joy.joyY(padIdx);
+                            else if(axisIdx === 0) raw = this.bonobo.joy.joyX(padIdx);
+                        }
+
+                        // Apply Deadzone to prevent drift
+                        if(Math.abs(raw) < 0.15) raw = 0.0;
 
                         val = raw * dir;
                     }

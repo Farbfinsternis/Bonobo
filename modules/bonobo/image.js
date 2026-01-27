@@ -19,7 +19,7 @@ export class Image{
 
     /**
      * Sets the handle of a specific image to its center.
-     * @param {object} img The image object.
+     * @param {Img} img The image object.
      */
     midHandle(img){
         img.midHandleRequested = true;
@@ -66,8 +66,26 @@ export class Image{
     }
 
     /**
+     * Creates a blank image object of specified dimensions.
+     * Useful for procedural generation before calling grabImage.
+     * @param {number} width Width of the image.
+     * @param {number} height Height of the image.
+     * @returns {Img} The new image object.
+     */
+    createImage(width, height){
+        let img = new Img();
+        img.width = width;
+        img.height = height;
+        img.tileWidth = width;
+        img.tileHeight = height;
+        img.loaded = true;
+        // Data will be filled by grabImage or remains empty/null until then
+        return img;
+    }
+
+    /**
      * Draws an image or a specific frame of a spritesheet.
-     * @param {object} img The image object.
+     * @param {Img} img The image object.
      * @param {number} x X-coordinate.
      * @param {number} y Y-coordinate.
      * @param {number} [frame=0] The frame index to draw.
@@ -98,7 +116,7 @@ export class Image{
 
     /**
      * Sets the scaling factor for an image.
-     * @param {object} img The image object.
+     * @param {Img} img The image object.
      * @param {number} x Horizontal scale factor.
      * @param {number} y Vertical scale factor.
      */
@@ -109,7 +127,7 @@ export class Image{
 
     /**
      * Sets the rotation angle for an image.
-     * @param {object} img The image object.
+     * @param {Img} img The image object.
      * @param {number} angle Rotation angle in degrees.
      */
     rotateImage(img, angle){
@@ -118,13 +136,13 @@ export class Image{
 
     /**
      * Tiles an image across the entire viewport.
-     * @param {object} img The image object.
+     * @param {Img} img The image object.
      * @param {number} x X-offset for tiling (scroll position).
      * @param {number} y Y-offset for tiling.
      * @param {number} [frame=0] The frame index to draw.
      */
     tileImage(img, x, y, frame = 0){
-        if(!img.loaded) return;
+        if(!img.loaded || img.tileWidth <= 0 || img.tileHeight <= 0) return;
         const ctx = this.bonobo.contextOwner.canvasContext;
         const viewW = this.bonobo.contextOwner.width;
         const viewH = this.bonobo.contextOwner.height;
@@ -148,7 +166,7 @@ export class Image{
 
     /**
      * Grabs a portion of the screen into an image object.
-     * @param {object} img The target image object.
+     * @param {Img} img The target image object.
      * @param {number} x X-coordinate on screen to grab from.
      * @param {number} y Y-coordinate on screen to grab from.
      */
@@ -172,6 +190,9 @@ export class Image{
     }
 }
 
+/**
+ * Represents an image asset with metadata for tiling and transformations.
+ */
 class Img{
     constructor(){
         this.loaded = false;
@@ -188,6 +209,10 @@ class Img{
         this.rotation = 0;
     }
 
+    /**
+     * Checks if the image data is fully loaded.
+     * @returns {boolean}
+     */
     get isLoaded(){
         return this.loaded;
     }

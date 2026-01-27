@@ -22,6 +22,8 @@ export class Mouse{
         this.bonobo.register(this);
         this.x = 0;
         this.y = 0;
+        this.isLocked = false;
+        this.ignoreNextDelta = false;
         this.lastX = 0;
         this.lastY = 0;
         this.xSpeed = 0;
@@ -36,6 +38,7 @@ export class Mouse{
         window.addEventListener("mouseup", (e) => this.mouseUp(e));
         window.addEventListener("contextmenu", (e) => e.preventDefault());
         window.addEventListener("wheel", (e) => this.mouseWheel(e), { passive: false });
+        document.addEventListener("pointerlockchange", () => this.onLockChange(), false);
     }
 
     /**
@@ -44,7 +47,14 @@ export class Mouse{
      * @param {MouseEvent} e The mouse event.
      */
     mouseMove(e){
-        if(this.bonobo.contextOwner){
+        if(this.isLocked){
+            // In locked mode, we use relative movement
+            this.x += e.movementX;
+            this.y += e.movementY;
+
+            // No clamping in locked mode to allow infinite delta movement
+        } else if(this.bonobo.contextOwner && this.bonobo.contextOwner.canvasData){
+            // In standard mode, we use absolute coordinates relative to canvas
             let canvas = this.bonobo.contextOwner.canvasData.element;
             let rect = canvas.getBoundingClientRect();
             this.x = e.clientX - rect.left;
@@ -77,6 +87,7 @@ export class Mouse{
      * @param {WheelEvent} e 
      */
     mouseWheel(e){
+        e.preventDefault();
         // Normalize wheel delta (usually 100 or 120, we want approx 1 per step)
         const delta = Math.sign(e.deltaY) * -1; 
         this.z += delta;
@@ -88,12 +99,20 @@ export class Mouse{
     update(){
         this.hitButtons = {};
         
-        this.xSpeed = this.x - this.lastX;
-        this.ySpeed = this.y - this.lastY;
+        if(this.ignoreNextDelta){
+            this.xSpeed = 0;
+            this.ySpeed = 0;
+            this.lastX = this.x;
+            this.lastY = this.y;
+            this.ignoreNextDelta = false;
+        } else {
+            this.xSpeed = this.x - this.lastX;
+            this.ySpeed = this.y - this.lastY;
+            this.lastX = this.x;
+            this.lastY = this.y;
+        }
+
         this.zSpeed = this.z - (this.lastZ || this.z);
-        
-        this.lastX = this.x;
-        this.lastY = this.y;
         this.lastZ = this.z;
     }
 
@@ -139,5 +158,27 @@ export class Mouse{
     flushMouse(){
         this.buttons = {};
         this.hitButtons = {};
+    }
+
+    /**
+     * Requests the browser to lock the mouse pointer to the canvas.
+     * Note: This usually requires a user gesture (click, keypress) to work.
+     */
+    lockPointer(){
+        if(this.bonobo.contextOwner){
+            this.bonobo.contextOwner.canvasData.element.requestPointerLock();
+        }
+    }
+
+    /**
+     * Releases the mouse pointer lock.
+     */
+    unlockPointer(){
+        document.exitPointerLock();
+    }
+
+    onLockChange(){
+        this.isLocked = (document.pointerLockElement === this.bonobo.contextOwner.canvasData.element);
+        this.ignoreNextDelta = true; // Prevent huge delta jumps when switching modes
     }
 }

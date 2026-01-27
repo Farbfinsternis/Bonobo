@@ -145,4 +145,14 @@ export class Draw{
         this.#ctx.fillStyle = this.#data.drawColor;
         this.#ctx.strokeStyle = this.#data.drawColor;
     }
+
+    /**
+     * Draws text at the specified coordinates using the active font.
+     * @param {string} text The text to draw.
+     * @param {number} x X-coordinate.
+     * @param {number} y Y-coordinate.
+     */
+    text(text, x, y){
+        this.#ctx.fillText(text, x, y);
+    }
 }

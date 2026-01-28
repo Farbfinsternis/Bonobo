@@ -22,6 +22,7 @@ let particles = [];
 // Cursor
 let cursorX = 0;
 let cursorY = 0;
+let selectedTile = "lava";
 
 // --- MAIN ---
 async function main(){
@@ -69,6 +70,14 @@ async function main(){
     input.bind("Place", "JOY_BTN", 0); // Button A / Cross
     input.bind("Place", "JOY_BTN", 1); // Button B / Circle
     input.bind("Place", "KEY", "KEY_SPACEBAR");
+
+    // Inventory Selection
+    input.bind("Slot1", "KEY", "KEY_1"); // Water
+    input.bind("Slot2", "KEY", "KEY_2"); // Sand
+    input.bind("Slot3", "KEY", "KEY_3"); // Grass
+    input.bind("Slot4", "KEY", "KEY_4"); // Rock
+    input.bind("Slot5", "KEY", "KEY_5"); // Snow
+    input.bind("Slot6", "KEY", "KEY_6"); // Lava
 
     // Setup Font
     // We use a system font fallback if no file is loaded, 
@@ -203,6 +212,14 @@ function loop(){
     cursorX = Math.max(0, Math.min(gfx.width, cursorX));
     cursorY = Math.max(0, Math.min(gfx.height, cursorY));
 
+    // Inventory Logic
+    if(input.isHit("Slot1")) selectedTile = "water";
+    if(input.isHit("Slot2")) selectedTile = "sand";
+    if(input.isHit("Slot3")) selectedTile = "grass";
+    if(input.isHit("Slot4")) selectedTile = "rock";
+    if(input.isHit("Slot5")) selectedTile = "snow";
+    if(input.isHit("Slot6")) selectedTile = "lava";
+
     // Place Tile Logic
     if(input.isHit("Place")){
         // If mouse clicked, snap cursor to mouse position immediately
@@ -229,7 +246,7 @@ function loop(){
 
         if(!isWater){
             // Save modification
-            modifiedTiles[`${worldX},${worldY}`] = "lava";
+            modifiedTiles[`${worldX},${worldY}`] = selectedTile;
             saveWorld();
 
             // Spawn Particles
@@ -352,8 +369,19 @@ function drawUI(){
     font.set(fontAsset, 20);
     draw.text(`POS: ${Math.floor(camX)}, ${Math.floor(camY)}`, 10, 10);
     draw.text("ARROWS/WASD/PAD to fly. SHIFT for speed.", 200, 10);
-    draw.text("Click/Btn 1/Space to place Lava. Right Stick moves cursor.", 200, 35);
+    draw.text("Click/Btn 1/Space to place. Right Stick moves cursor.", 200, 35);
+    draw.text("Keys 1-6 to select material.", 200, 60);
+    
+    // Show selected tile
+    draw.text(`Selected: ${selectedTile.toUpperCase()}`, 10, 60);
+    img.draw(tiles[selectedTile], 10 + font.width(`Selected: ${selectedTile.toUpperCase()}`) + 10, 55);
+
     draw.text(`SEED: ${worldSeed.toFixed(6)}`, 10, 35);
+
+    // Version Display
+    font.align("right", "bottom");
+    draw.text(`v${Bonobo.VERSION}`, gfx.width - 5, gfx.height - 5);
+    font.align("left", "top"); // Reset alignment
 }
 
 document.addEventListener("DOMContentLoaded", main);

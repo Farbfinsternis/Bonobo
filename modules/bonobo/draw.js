@@ -144,6 +144,27 @@ export class Draw{
         
         this.#ctx.fillStyle = this.#data.drawColor;
         this.#ctx.strokeStyle = this.#data.drawColor;
+
+        if(this.#data.alpha !== undefined){
+            this.#ctx.globalAlpha = this.#data.alpha;
+        }
+    }
+
+    /**
+     * Sets the global alpha transparency.
+     * @param {number} alpha Alpha value (0.0 to 1.0).
+     */
+    setAlpha(alpha){
+        this.#data.alpha = alpha;
+        this.#ctx.globalAlpha = alpha;
+    }
+
+    /**
+     * Returns the current global alpha transparency.
+     * @returns {number} The current alpha value.
+     */
+    getAlpha(){
+        return this.#ctx.globalAlpha;
     }
 
     /**

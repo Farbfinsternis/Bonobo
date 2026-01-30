@@ -3,6 +3,7 @@ import { Entity } from "./entity.js";
 import { Camera } from "./camera.js";
 import { Mesh } from "./mesh.js";
 import { Light } from "./light.js";
+import { Skybox } from "./skybox.js";
 import { Matrix4 } from "./matrix.js";
 
 /**
@@ -19,6 +20,9 @@ export class Graphics3D {
         bonobo.contextOwner = this;
         this.canvasData = {};
         this.initCanvas(width, height);
+        this.viewMatrix = new Matrix4();
+        this.tempMatrix = new Matrix4(); // Scratchpad for calculations
+        this.inverseModelMatrix = new Matrix4();
     }
 
     initCanvas(width, height) {
@@ -163,13 +167,26 @@ export class Graphics3D {
         };
         light = findLight(Entity.roots);
 
+        // Find Skybox (if any)
+        let skybox = null;
+        const findSkybox = (entities) => {
+            for (const e of entities) {
+                if (e instanceof Skybox && e.visible) return e;
+                if (e.children.length > 0) {
+                    const s = findSkybox(e.children);
+                    if (s) return s;
+                }
+            }
+            return null;
+        };
+        skybox = findSkybox(Entity.roots);
+
         if (!camera) return; // No camera, nothing to render
 
         // 3. Setup Camera
         camera.updateProjection(this.width, this.height);
         
         // View Matrix is the inverse of the Camera's World Matrix
-        const viewMatrix = new Float32Array(camera.worldMatrix.data);
         // We need to invert the camera's world matrix to get the view matrix
         // Since we added invert() to Matrix4, we can use it (conceptually).
         // However, Matrix4.invert operates in place. We should clone first.
@@ -179,9 +196,8 @@ export class Graphics3D {
         // Since we don't have a clean clone yet, let's just use the data directly if we had a helper.
         // Wait, we added invert() to Matrix4 in the previous step.
         // Let's create a temporary matrix object to hold the view matrix.
-        const viewMatObj = new Matrix4();
-        viewMatObj.copy(camera.worldMatrix);
-        viewMatObj.invert();
+        this.viewMatrix.copy(camera.worldMatrix);
+        this.viewMatrix.invert();
 
         // Clear with Camera Color
         if (this.gl) {
@@ -195,15 +211,25 @@ export class Graphics3D {
         
         this.defaultShader.use();
         
+        // Initialize Sampler Slots to avoid conflicts (sampler2D vs samplerCube on Unit 0)
+        const s = this.defaultShader.uniforms;
+        if (s["u_texture"]) this.gl.uniform1i(s["u_texture"], 0);
+        if (s["u_normalTexture"]) this.gl.uniform1i(s["u_normalTexture"], 1);
+        if (s["u_roughnessTexture"]) this.gl.uniform1i(s["u_roughnessTexture"], 2);
+        if (s["u_occlusionTexture"]) this.gl.uniform1i(s["u_occlusionTexture"], 3);
+        if (s["u_emissiveTexture"]) this.gl.uniform1i(s["u_emissiveTexture"], 4);
+        if (s["u_envMap"]) this.gl.uniform1i(s["u_envMap"], 5);
+
         // Set Global Uniforms
         const uProjection = this.defaultShader.uniforms["u_projection"];
         const uView = this.defaultShader.uniforms["u_view"];
         const uLightPos = this.defaultShader.uniforms["u_lightPos"];
         const uLightColor = this.defaultShader.uniforms["u_lightColor"];
         const uAmbientLight = this.defaultShader.uniforms["u_ambientLight"];
+        const uViewPos = this.defaultShader.uniforms["u_viewPos"];
         
         this.gl.uniformMatrix4fv(uProjection, false, camera.projectionMatrix.data);
-        this.gl.uniformMatrix4fv(uView, false, viewMatObj.data);
+        this.gl.uniformMatrix4fv(uView, false, this.viewMatrix.data);
         this.gl.uniform3f(uAmbientLight, Light.ambient.r, Light.ambient.g, Light.ambient.b);
 
         if (light) {
@@ -214,7 +240,25 @@ export class Graphics3D {
             this.gl.uniform3f(uLightColor, 1, 1, 1);
         }
 
+        // Camera Position (from World Matrix translation)
+        this.gl.uniform3f(uViewPos, camera.worldMatrix.data[12], camera.worldMatrix.data[13], camera.worldMatrix.data[14]);
+
+        // 4a. Render Skybox (First, no depth write)
+        if (skybox) {
+            // Center skybox on camera
+            skybox.position(camera.worldMatrix.data[12], camera.worldMatrix.data[13], camera.worldMatrix.data[14]);
+            skybox.updateMatrices();
+            
+            this.gl.depthMask(false); // Don't write to depth buffer
+            this.renderMesh(skybox);
+            this.gl.depthMask(true); // Re-enable depth write
+        }
+
+        // 4b. Render Scene
         const renderEntity = (entity) => {
+            if (!entity.visible) return;
+            if (entity instanceof Skybox) return; // Skip skybox in normal pass
+
             if (entity instanceof Mesh) {
                 this.renderMesh(entity);
             }
@@ -238,6 +282,51 @@ export class Graphics3D {
         // Set Entity Color
         gl.uniform4f(shader.uniforms["u_entityColor"], mesh.color.r, mesh.color.g, mesh.color.b, mesh.color.a);
 
+        // Set Emissive Factor
+        gl.uniform3f(shader.uniforms["u_emissiveFactor"], mesh.emissiveColor.r, mesh.emissiveColor.g, mesh.emissiveColor.b);
+
+        // Set PBR Factors
+        gl.uniform1f(shader.uniforms["u_metallic"], mesh.metallic);
+        gl.uniform1f(shader.uniforms["u_roughness"], mesh.roughness);
+
+        // Skinning / Bone Matrices
+        if (mesh.skin && mesh.skin.joints && mesh.skin.joints.length > 0) {
+            gl.uniform1i(shader.uniforms["u_useSkinning"], 1);
+            
+            // Calculate Bone Matrices
+            // jointMatrix[i] = inverse(mesh.worldMatrix) * joint[i].worldMatrix * inverseBindMatrix[i]
+            // Result is a transform from Mesh Space (Bind Pose) -> Mesh Space (Current Pose)
+            // The shader then applies u_model (mesh.worldMatrix) to get to World Space.
+            
+            this.inverseModelMatrix.copy(mesh.worldMatrix).invert();
+            
+            const boneData = new Float32Array(mesh.skin.joints.length * 16);
+            const bindMat = this.tempMatrix; // Reuse temp matrix container
+
+            for (let i = 0; i < mesh.skin.joints.length; i++) {
+                const joint = mesh.skin.joints[i];
+                
+                // Start with Inverse Model Matrix
+                const m = new Matrix4(); // TODO: Optimize this allocation out later with a pool or static helper
+                m.copy(this.inverseModelMatrix);
+                
+                // Multiply by Joint World Matrix
+                if (joint) m.multiply(joint.worldMatrix);
+                
+                // Multiply by Inverse Bind Matrix
+                if (mesh.skin.inverseBindMatrices) {
+                    bindMat.data.set(mesh.skin.inverseBindMatrices.subarray(i * 16, i * 16 + 16));
+                    m.multiply(bindMat);
+                }
+                
+                boneData.set(m.data, i * 16);
+            }
+            
+            gl.uniformMatrix4fv(shader.uniforms["u_boneMatrices"], false, boneData);
+        } else {
+            gl.uniform1i(shader.uniforms["u_useSkinning"], 0);
+        }
+
         // Texture Handling
         if (mesh.texture && mesh.texture.loaded) {
             if (!mesh.texture.glTexture) {
@@ -257,22 +346,149 @@ export class Graphics3D {
             gl.uniform1i(shader.uniforms["u_texture"], 0);
             gl.uniform1i(shader.uniforms["u_useTexture"], 1);
         } else {
+            gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, null);
             gl.uniform1i(shader.uniforms["u_useTexture"], 0);
+        }
+
+        // Normal Map Handling
+        if (mesh.normalTexture && mesh.normalTexture.loaded) {
+            if (!mesh.normalTexture.glTexture) {
+                const tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mesh.normalTexture.image);
+                gl.generateMipmap(gl.TEXTURE_2D);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                mesh.normalTexture.glTexture = tex;
+            }
+            
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, mesh.normalTexture.glTexture);
+            gl.uniform1i(shader.uniforms["u_normalTexture"], 1);
+            gl.uniform1i(shader.uniforms["u_useNormalTexture"], 1);
+        } else {
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.uniform1i(shader.uniforms["u_useNormalTexture"], 0);
+        }
+
+        // Roughness/Metallic Map Handling
+        if (mesh.roughnessTexture && mesh.roughnessTexture.loaded) {
+            if (!mesh.roughnessTexture.glTexture) {
+                const tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mesh.roughnessTexture.image);
+                gl.generateMipmap(gl.TEXTURE_2D);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                mesh.roughnessTexture.glTexture = tex;
+            }
+            
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, mesh.roughnessTexture.glTexture);
+            gl.uniform1i(shader.uniforms["u_roughnessTexture"], 2);
+            gl.uniform1i(shader.uniforms["u_useRoughnessTexture"], 1);
+        } else {
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.uniform1i(shader.uniforms["u_useRoughnessTexture"], 0);
+        }
+
+        // Occlusion Map Handling
+        if (mesh.occlusionTexture && mesh.occlusionTexture.loaded) {
+            if (!mesh.occlusionTexture.glTexture) {
+                const tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mesh.occlusionTexture.image);
+                gl.generateMipmap(gl.TEXTURE_2D);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                mesh.occlusionTexture.glTexture = tex;
+            }
+            
+            gl.activeTexture(gl.TEXTURE3);
+            gl.bindTexture(gl.TEXTURE_2D, mesh.occlusionTexture.glTexture);
+            gl.uniform1i(shader.uniforms["u_occlusionTexture"], 3);
+            gl.uniform1i(shader.uniforms["u_useOcclusionTexture"], 1);
+        } else {
+            gl.activeTexture(gl.TEXTURE3);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.uniform1i(shader.uniforms["u_useOcclusionTexture"], 0);
+        }
+
+        // Emissive Map Handling
+        if (mesh.emissiveTexture && mesh.emissiveTexture.loaded) {
+            if (!mesh.emissiveTexture.glTexture) {
+                const tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mesh.emissiveTexture.image);
+                gl.generateMipmap(gl.TEXTURE_2D);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                mesh.emissiveTexture.glTexture = tex;
+            }
+            
+            gl.activeTexture(gl.TEXTURE4);
+            gl.bindTexture(gl.TEXTURE_2D, mesh.emissiveTexture.glTexture);
+            gl.uniform1i(shader.uniforms["u_emissiveTexture"], 4);
+            gl.uniform1i(shader.uniforms["u_useEmissiveTexture"], 1);
+        } else {
+            gl.activeTexture(gl.TEXTURE4);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.uniform1i(shader.uniforms["u_useEmissiveTexture"], 0);
+        }
+
+        // Environment Map (CubeMap) Handling
+        if (mesh.envMap && mesh.envMap.loaded && mesh.envMap.isCubeMap) {
+            if (!mesh.envMap.glTexture) {
+                const tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_CUBE_MAP, tex);
+                const targets = [
+                    gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+                    gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+                    gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
+                ];
+                for(let i=0; i<6; i++) {
+                    gl.texImage2D(targets[i], 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mesh.envMap.images[i]);
+                }
+                gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+                gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                mesh.envMap.glTexture = tex;
+            }
+            
+            gl.activeTexture(gl.TEXTURE5);
+            gl.bindTexture(gl.TEXTURE_CUBE_MAP, mesh.envMap.glTexture);
+            gl.uniform1i(shader.uniforms["u_envMap"], 5);
+            gl.uniform1i(shader.uniforms["u_useEnvMap"], 1);
+        } else {
+            gl.activeTexture(gl.TEXTURE5);
+            gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
+            gl.uniform1i(shader.uniforms["u_useEnvMap"], 0);
         }
 
         for (const surf of mesh.surfaces) {
             // Lazy init buffers
             if (!surf.glData) {
                 surf.glData = {};
-                // Vertices (Interleaved: x,y,z, u,v, nx,ny,nz, r,g,b,a)
+                // Vertices (Interleaved: x,y,z, u,v, nx,ny,nz, tx,ty,tz,tw, r,g,b,a, j0,j1,j2,j3, w0,w1,w2,w3)
                 // Current Surface structure is array of objects. We need Float32Array.
                 const vertexData = [];
                 for(const v of surf.vertices) {
                     vertexData.push(v.x, v.y, v.z);
                     vertexData.push(v.u, v.v);
                     vertexData.push(v.nx, v.ny, v.nz);
+                    vertexData.push(v.tx, v.ty, v.tz, v.tw);
                     vertexData.push(v.r, v.g, v.b, v.a);
+                    
+                    if (v.joints && v.weights) {
+                        vertexData.push(...v.joints);
+                        vertexData.push(...v.weights);
+                    } else {
+                        vertexData.push(0, 0, 0, 0);
+                        vertexData.push(0, 0, 0, 0);
+                    }
                 }
                 surf.glData.vbo = gl.createBuffer();
                 gl.bindBuffer(gl.ARRAY_BUFFER, surf.glData.vbo);
@@ -289,29 +505,47 @@ export class Graphics3D {
             gl.bindBuffer(gl.ARRAY_BUFFER, surf.glData.vbo);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, surf.glData.ibo);
 
-            // Setup Attributes (Stride = 12 floats: 3 pos, 2 uv, 3 norm, 4 color)
-            const stride = 12 * 4;
+            // Setup Attributes (Stride = 24 floats: 3 pos, 2 uv, 3 norm, 4 tan, 4 color, 4 joints, 4 weights)
+            const stride = 24 * 4;
             
             // Position (Offset 0)
             gl.enableVertexAttribArray(shader.attribs["a_position"]);
             gl.vertexAttribPointer(shader.attribs["a_position"], 3, gl.FLOAT, false, stride, 0);
 
             // UV (Offset 3*4 = 12)
-            if (shader.attribs["a_uv"] !== -1) {
+            if (shader.attribs["a_uv"] !== undefined && shader.attribs["a_uv"] !== -1) {
                 gl.enableVertexAttribArray(shader.attribs["a_uv"]);
                 gl.vertexAttribPointer(shader.attribs["a_uv"], 2, gl.FLOAT, false, stride, 3 * 4);
             }
 
             // Normal (Offset 5*4 = 20)
-            if (shader.attribs["a_normal"] !== -1) {
+            if (shader.attribs["a_normal"] !== undefined && shader.attribs["a_normal"] !== -1) {
                 gl.enableVertexAttribArray(shader.attribs["a_normal"]);
                 gl.vertexAttribPointer(shader.attribs["a_normal"], 3, gl.FLOAT, false, stride, 5 * 4);
             }
 
-            // Color (Offset 8*4 = 32)
-            if (shader.attribs["a_color"] !== -1) {
+            // Tangent (Offset 8*4 = 32)
+            if (shader.attribs["a_tangent"] !== undefined && shader.attribs["a_tangent"] !== -1) {
+                gl.enableVertexAttribArray(shader.attribs["a_tangent"]);
+                gl.vertexAttribPointer(shader.attribs["a_tangent"], 4, gl.FLOAT, false, stride, 8 * 4);
+            }
+
+            // Color (Offset 12*4 = 48)
+            if (shader.attribs["a_color"] !== undefined && shader.attribs["a_color"] !== -1) {
                 gl.enableVertexAttribArray(shader.attribs["a_color"]);
-                gl.vertexAttribPointer(shader.attribs["a_color"], 4, gl.FLOAT, false, stride, 8 * 4);
+                gl.vertexAttribPointer(shader.attribs["a_color"], 4, gl.FLOAT, false, stride, 12 * 4);
+            }
+
+            // Joints (Offset 16*4 = 64)
+            if (shader.attribs["a_joints"] !== undefined && shader.attribs["a_joints"] !== -1) {
+                gl.enableVertexAttribArray(shader.attribs["a_joints"]);
+                gl.vertexAttribPointer(shader.attribs["a_joints"], 4, gl.FLOAT, false, stride, 16 * 4);
+            }
+
+            // Weights (Offset 20*4 = 80)
+            if (shader.attribs["a_weights"] !== undefined && shader.attribs["a_weights"] !== -1) {
+                gl.enableVertexAttribArray(shader.attribs["a_weights"]);
+                gl.vertexAttribPointer(shader.attribs["a_weights"], 4, gl.FLOAT, false, stride, 20 * 4);
             }
 
             // Draw

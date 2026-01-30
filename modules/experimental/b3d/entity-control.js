@@ -7,6 +7,14 @@ export class EntityControl {
         // Color & Alpha (Default: White, Opaque)
         this.color = { r: 1, g: 1, b: 1, a: 1 };
         this.texture = null;
+        this.normalTexture = null;
+        this.roughnessTexture = null;
+        this.occlusionTexture = null;
+        this.emissiveTexture = null;
+        this.emissiveColor = { r: 0, g: 0, b: 0 };
+        this.envMap = null;
+        this.metallic = 0.0;
+        this.roughness = 0.5;
     }
 
     /**
@@ -37,5 +45,64 @@ export class EntityControl {
      */
     entityTexture(texture, frame = 0, index = 0) {
         this.texture = texture;
+    }
+
+    /**
+     * Applies a normal map texture to the entity.
+     * @param {Texture} texture The normal map texture.
+     */
+    entityNormalTexture(texture) {
+        this.normalTexture = texture;
+    }
+
+    /**
+     * Applies a roughness/metallic texture to the entity.
+     * @param {Texture} texture The roughness texture (GLTF packs Metallic in B, Roughness in G).
+     */
+    entityRoughnessTexture(texture) {
+        this.roughnessTexture = texture;
+    }
+
+    /**
+     * Applies an occlusion texture (AO).
+     * @param {Texture} texture 
+     */
+    entityOcclusionTexture(texture) {
+        this.occlusionTexture = texture;
+    }
+
+    /**
+     * Applies an emissive texture.
+     * @param {Texture} texture 
+     */
+    entityEmissiveTexture(texture) {
+        this.emissiveTexture = texture;
+    }
+
+    /**
+     * Sets the emissive factor color.
+     */
+    entityEmissiveColor(r, g, b) {
+        this.emissiveColor.r = r / 255.0;
+        this.emissiveColor.g = g / 255.0;
+        this.emissiveColor.b = b / 255.0;
+    }
+
+    /**
+     * Applies an environment map (CubeMap) for reflections.
+     * @param {Texture} texture The CubeMap texture.
+     */
+    entityEnvMap(texture) {
+        this.envMap = texture;
+    }
+
+    /**
+     * Sets PBR material properties.
+     * @param {number} metallic 0.0 (dielectric) to 1.0 (metal).
+     * @param {number} roughness 0.0 (smooth) to 1.0 (rough).
+     */
+    entityPBR(metallic, roughness) {
+        this.metallic = metallic;
+        this.roughness = roughness;
     }
 }

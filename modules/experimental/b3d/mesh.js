@@ -33,7 +33,7 @@ export class Mesh extends Entity {
         const surf = mesh.createSurface();
 
         // Helper to add a quad face with specific normal
-        const addFace = (v0, v1, v2, v3, nx, ny, nz) => {
+        const addFace = (v0, v1, v2, v3, nx, ny, nz, tx, ty, tz) => {
             const i0 = surf.addVertex(v0.x, v0.y, v0.z, 0, 0);
             const i1 = surf.addVertex(v1.x, v1.y, v1.z, 1, 0);
             const i2 = surf.addVertex(v2.x, v2.y, v2.z, 1, 1);
@@ -44,22 +44,27 @@ export class Mesh extends Entity {
             surf.vertexNormal(i2, nx, ny, nz);
             surf.vertexNormal(i3, nx, ny, nz);
 
+            surf.vertexTangent(i0, tx, ty, tz);
+            surf.vertexTangent(i1, tx, ty, tz);
+            surf.vertexTangent(i2, tx, ty, tz);
+            surf.vertexTangent(i3, tx, ty, tz);
+
             surf.addTriangle(i0, i1, i2);
             surf.addTriangle(i0, i2, i3);
         };
 
         // Front (-Z)
-        addFace({x:-1,y:1,z:-1}, {x:1,y:1,z:-1}, {x:1,y:-1,z:-1}, {x:-1,y:-1,z:-1}, 0, 0, -1);
+        addFace({x:-1,y:1,z:-1}, {x:1,y:1,z:-1}, {x:1,y:-1,z:-1}, {x:-1,y:-1,z:-1}, 0, 0, -1, 1, 0, 0);
         // Back (+Z)
-        addFace({x:1,y:1,z:1}, {x:-1,y:1,z:1}, {x:-1,y:-1,z:1}, {x:1,y:-1,z:1}, 0, 0, 1);
+        addFace({x:1,y:1,z:1}, {x:-1,y:1,z:1}, {x:-1,y:-1,z:1}, {x:1,y:-1,z:1}, 0, 0, 1, -1, 0, 0);
         // Left (-X)
-        addFace({x:-1,y:1,z:1}, {x:-1,y:1,z:-1}, {x:-1,y:-1,z:-1}, {x:-1,y:-1,z:1}, -1, 0, 0);
+        addFace({x:-1,y:1,z:1}, {x:-1,y:1,z:-1}, {x:-1,y:-1,z:-1}, {x:-1,y:-1,z:1}, -1, 0, 0, 0, 0, -1);
         // Right (+X)
-        addFace({x:1,y:1,z:-1}, {x:1,y:1,z:1}, {x:1,y:-1,z:1}, {x:1,y:-1,z:-1}, 1, 0, 0);
+        addFace({x:1,y:1,z:-1}, {x:1,y:1,z:1}, {x:1,y:-1,z:1}, {x:1,y:-1,z:-1}, 1, 0, 0, 0, 0, 1);
         // Top (+Y)
-        addFace({x:-1,y:1,z:1}, {x:1,y:1,z:1}, {x:1,y:1,z:-1}, {x:-1,y:1,z:-1}, 0, 1, 0);
+        addFace({x:-1,y:1,z:1}, {x:1,y:1,z:1}, {x:1,y:1,z:-1}, {x:-1,y:1,z:-1}, 0, 1, 0, 1, 0, 0);
         // Bottom (-Y)
-        addFace({x:-1,y:-1,z:-1}, {x:1,y:-1,z:-1}, {x:1,y:-1,z:1}, {x:-1,y:-1,z:1}, 0, -1, 0);
+        addFace({x:-1,y:-1,z:-1}, {x:1,y:-1,z:-1}, {x:1,y:-1,z:1}, {x:-1,y:-1,z:1}, 0, -1, 0, 1, 0, 0);
 
         return mesh;
     }
@@ -218,7 +223,10 @@ export class Mesh extends Entity {
         const v3 = surf.addVertex(-size, 0, -size, 0, 0);         // Bottom Left
 
         // Normals pointing UP (0, 1, 0)
-        for(let i=0; i<4; i++) surf.vertexNormal(i, 0, 1, 0);
+        for(let i=0; i<4; i++) {
+            surf.vertexNormal(i, 0, 1, 0);
+            surf.vertexTangent(i, 1, 0, 0);
+        }
 
         surf.addTriangle(v0, v1, v2);
         surf.addTriangle(v0, v2, v3);
@@ -297,6 +305,36 @@ export class Mesh extends Entity {
         GLTFLoader.load(url, mesh, Mesh);
         return mesh;
     }
+
+    /**
+     * Creates an instance of the mesh (Blitz3D CopyEntity).
+     * The new mesh shares the geometry (surfaces) of the original.
+     * @param {Entity} [parent] Optional parent entity.
+     * @returns {Mesh} The new mesh instance.
+     */
+    copyEntity(parent) {
+        const copy = new Mesh(parent);
+        
+        // Copy Transform
+        copy.position(this.x, this.y, this.z);
+        copy.rotate(this.pitch, this.yaw, this.roll);
+        copy.scale(this.scaleX, this.scaleY, this.scaleZ);
+        
+        // Copy EntityControl properties
+        copy.color = { ...this.color };
+        copy.texture = this.texture;
+        copy.normalTexture = this.normalTexture;
+        copy.roughnessTexture = this.roughnessTexture;
+        copy.occlusionTexture = this.occlusionTexture;
+        copy.emissiveTexture = this.emissiveTexture;
+        copy.emissiveColor = { ...this.emissiveColor };
+        copy.envMap = this.envMap;
+
+        // Share Geometry (Instancing)
+        copy.surfaces = this.surfaces;
+
+        return copy;
+    }
 }
 
 /**
@@ -310,7 +348,7 @@ export class Surface {
     }
 
     addVertex(x, y, z, u = 0, v = 0, w = 0) {
-        const vert = { x, y, z, u, v, w, nx: 0, ny: 0, nz: 0, r: 1, g: 1, b: 1, a: 1 };
+        const vert = { x, y, z, u, v, w, nx: 0, ny: 0, nz: 0, tx: 0, ty: 0, tz: 0, tw: 1, r: 1, g: 1, b: 1, a: 1 };
         return this.vertices.push(vert) - 1;
     }
 
@@ -319,6 +357,22 @@ export class Surface {
             this.vertices[index].nx = nx;
             this.vertices[index].ny = ny;
             this.vertices[index].nz = nz;
+        }
+    }
+
+    vertexTangent(index, tx, ty, tz, tw = 1) {
+        if(this.vertices[index]) {
+            this.vertices[index].tx = tx;
+            this.vertices[index].ty = ty;
+            this.vertices[index].tz = tz;
+            this.vertices[index].tw = tw;
+        }
+    }
+
+    vertexBones(index, joints, weights) {
+        if(this.vertices[index]) {
+            this.vertices[index].joints = joints;
+            this.vertices[index].weights = weights;
         }
     }
     

@@ -23,6 +23,8 @@ export class Entity extends EntityControl {
         this.scaleY = 1;
         this.scaleZ = 1;
 
+        this.visible = true;
+
         // Hierarchy
         this.parent = null;
         this.children = [];
@@ -123,5 +125,45 @@ export class Entity extends EntityControl {
         for (const child of this.children) {
             child.updateMatrices();
         }
+    }
+
+    /**
+     * Hides the entity.
+     */
+    hide() {
+        this.visible = false;
+    }
+
+    /**
+     * Shows the entity.
+     */
+    show() {
+        this.visible = true;
+    }
+
+    /**
+     * Checks if the entity is hidden.
+     */
+    hidden() {
+        return !this.visible;
+    }
+
+    /**
+     * Removes the entity from the scene and its parent.
+     */
+    free() {
+        if (this.parent) {
+            const idx = this.parent.children.indexOf(this);
+            if (idx > -1) this.parent.children.splice(idx, 1);
+            this.parent = null;
+        } else {
+            const idx = Entity.roots.indexOf(this);
+            if (idx > -1) Entity.roots.splice(idx, 1);
+        }
+        
+        for (const child of [...this.children]) {
+            child.free();
+        }
+        this.children = [];
     }
 }

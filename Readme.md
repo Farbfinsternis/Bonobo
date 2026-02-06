@@ -55,6 +55,24 @@ function loop(){
 }
 ```
 
+## Introducing ApeShift (Experimental)
+ApeShift is an experimental compiler designed to translate Blitz2D syntax into modern JavaScript for the Bonobo Engine. It includes a fully redesigned Web IDE and significant enhancements to the language support.
+
+### Features
+* ApeShift Compiler:
+Control Flow: Support for Select...Case and Exit (loop break).
+Data Management: Data, Read, and Restore commands for embedding assets/level data.
+Variables: Support for Const and Dim (Arrays), along with improved global/local scope handling.
+Preprocessor: Recursive Include support to modularize code.
+Syntax: Improved parsing for type suffixes (obj.Type) and function calls.
+
+* Engine Integration:
+Input Mapping: Automatic translation of legacy Blitz2D keycodes and mouse buttons to modern JS events.
+Smart Mapping: Intelligent argument conversion for graphics commands.
+Auto-Init: Automatic registration of core modules (Keys, Mouse) in the generated code.
+
+To try the compiler, open cpl/index.html in your browser.
+
 ## 📂 Structure
 
 *   `/lib`: The core engine code (`bonobo.js`, `utils.js`).

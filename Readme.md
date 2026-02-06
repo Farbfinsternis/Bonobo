@@ -63,5 +63,6 @@ function loop(){
     *   `/bobs`: Sprite handling.
     *   `/tilemap`: Tiled map loader.
     *   `/assets`: Asset management.
+*   `/cpl`: The ApeShift Compiler and Web IDE.
 *   `/examples`: Sample projects.
 ```

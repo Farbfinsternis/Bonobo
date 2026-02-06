@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApeShift</title>
+    <style>
+        :root {
+            --bg-dark: #1e1e1e;
+            --bg-panel: #252526;
+            --border: #333;
+            --accent: #F57C00;
+            --text-main: #cccccc;
+            --text-muted: #858585;
+            --font-code: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            height: 48px;
+            background-color: #333333;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 10;
+            border-bottom: 1px solid #111;
+        }
+
+        .brand {
+            font-weight: 400;
+            font-size: 18px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .brand span {
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        /* Layout */
+        .workspace {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            padding: 10px;
+            gap: 10px;
+            height: calc(100vh - 48px);
+        }
+
+        .code-pane {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+            min-height: 0;
+        }
+
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .panel-header {
+            padding: 8px 12px;
+            background-color: #2d2d2d;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+
+        .editor-content {
+            flex: 1;
+            position: relative;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-panel);
+            color: #d4d4d4;
+            border: none;
+            resize: none;
+            padding: 15px;
+            box-sizing: border-box;
+            font-family: var(--font-code);
+            font-size: 14px;
+            line-height: 1.5;
+            outline: none;
+        }
+
+        textarea:focus {
+            background-color: #1f1f1f;
+        }
+
+        /* Syntax Highlighting Colors (Fake) */
+        #source { color: #9cdcfe; }
+        #js-code { color: #ce9178; }
+
+        .preview-pane {
+            flex: 1;
+            background-color: #000;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: #424242; border-radius: 5px; border: 2px solid var(--bg-dark); }
+        ::-webkit-scrollbar-thumb:hover { background: #4f4f4f; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <img src="logo.svg" alt="Logo" style="height: 32px; width: 32px;">
+            <div>Ape<span>Shift</span></div>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <div class="code-pane">
+            <div class="panel">
+                <div class="panel-header">Blitz2D Source</div>
+                <div class="editor-content">
+                    <textarea id="source" spellcheck="false">
+Graphics 640, 480
+
+; Globals
+Global playerX = 320
+Global playerY = 240
+Global mode = 1
+Global angle = 0
+
+; Arrays
+Dim starsX(100)
+Dim starsY(100)
+Dim starsSpeed(100)
+
+; Init Stars
+For i = 0 To 100
+    starsX(i) = Rand(0, 640)
+    starsY(i) = Rand(0, 480)
+    starsSpeed(i) = Rand(1, 5)
+Next
+
+; Load Ship Sprite from Data
+Dim ship(10, 7)
+Restore ShipData
+For y = 0 To 7
+    For x = 0 To 10
+        Read pixel
+        ship(x, y) = pixel
+    Next
+Next
+
+; Type for Particles
+Type Particle
+    Field x, y, life
+    Field r, g, b
+End Type
+
+While Not KeyDown(1)
+    Cls
+    
+    ; Draw Stars
+    Color 100, 100, 100
+    For i = 0 To 100
+        starsY(i) = starsY(i) + starsSpeed(i)
+        If starsY(i) > 480 Then 
+            starsY(i) = 0
+            starsX(i) = Rand(0, 640)
+        EndIf
+        Plot starsX(i), starsY(i)
+    Next
+
+    ; Input
+    If KeyDown(203) Then playerX = playerX - 4
+    If KeyDown(205) Then playerX = playerX + 4
+    If KeyDown(200) Then playerY = playerY - 4
+    If KeyDown(208) Then playerY = playerY + 4
+    
+    ; Mode Switch
+    If KeyHit(57) Then mode = mode + 1
+    If mode > 3 Then mode = 1
+    
+    Select mode
+        Case 1
+            Color 0, 255, 0
+            Text 10, 10, "Mode 1: Ship (Space to switch)"
+            ; Draw Ship (Pixel Art)
+            For y = 0 To 7
+                For x = 0 To 10
+                    If ship(x, y) = 1
+                        Rect playerX + (x * 4) - 22, playerY + (y * 4) - 16, 4, 4, 1
+                    EndIf
+                Next
+            Next
+        Case 2
+            Color 0, 0, 255
+            Text 10, 10, "Mode 2: Oval (Space to switch)"
+            Oval playerX - 16, playerY - 16, 32, 32, 1
+        Case 3
+            Color 255, 0, 0
+            Text 10, 10, "Mode 3: Line (Space to switch)"
+            angle = angle + 5
+            Line playerX, playerY, playerX + Cos(angle)*30, playerY + Sin(angle)*30
+    End Select
+
+    ; Controls Info
+    Color 255, 255, 255
+    Text 10, 440, "Controls: Arrows to move, Space to switch mode"
+    Text 10, 460, "Click to spawn particles"
+
+    ; Particles (Spawn on Mouse Hit)
+    If MouseHit(1)
+        For k = 1 To 10
+            p.Particle = New Particle
+            p\x = MouseX()
+            p\y = MouseY()
+            p\life = 50 + Rand(0, 20)
+            p\r = Rand(100, 255)
+            p\g = Rand(50, 150)
+            p\b = 0
+        Next
+    EndIf
+    
+    UpdateParticles()
+
+    Flip
+Wend
+End
+
+Function UpdateParticles()
+    For p.Particle = Each Particle
+        p\y = p\y + 2
+        p\x = p\x + Rand(-1, 1)
+        p\life = p\life - 1
+        
+        Color p\r, p\g, p\b
+        Rect p\x, p\y, 3, 3, 1
+        
+        If p\life < 0 Then Delete p
+    Next
+End Function
+
+.ShipData
+Data 0,0,0,0,0,1,0,0,0,0,0
+Data 0,0,0,0,1,1,1,0,0,0,0
+Data 0,0,0,1,1,1,1,1,0,0,0
+Data 0,0,1,1,0,1,0,1,1,0,0
+Data 0,1,1,1,1,1,1,1,1,1,0
+Data 1,1,0,1,1,1,1,1,0,1,1
+Data 1,0,0,0,0,1,0,0,0,0,1
+Data 1,0,0,0,1,0,1,0,0,0,1
+</textarea>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">Generated JavaScript</div>
+                <div class="editor-content">
+                    <textarea id="js-code" readonly></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="preview-pane">
+            <iframe id="game-frame"></iframe>
+        </div>
+    </div>
+
+    <script type="module" src="./compiler.js"></script>
+</body>
+</html>

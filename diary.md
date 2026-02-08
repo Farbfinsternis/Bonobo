@@ -62,3 +62,26 @@
 ### Status Quo
 - Der Compiler ist nun in der Lage, komplexe, verschachtelte Blitz2D-Strukturen (Entity-Systeme, Scrolling-Engines) stabil in performanten JavaScript-Code zu übersetzen.
 - Die Trennung zwischen Engine (Bonobo), Compiler (ApeShift) und UI (Playground) ist architektonisch sauber abgeschlossen.
+
+## Masterplan: Roadmap to 100% Blitz2D Compatibility
+
+### Phase 1: Binary Data & Memory (High Priority)
+- [ ] **Binary I/O:** Implement `ReadInt`, `WriteInt`, `ReadFloat`, `WriteFloat` using `DataView`.
+- [ ] **Bank System:** Full implementation of `CreateBank`, `Peek`, `Poke`, and `CopyBank`.
+
+### Phase 2: Advanced Graphics & Collision
+- [ ] **Pixel Access:** Implement `ReadPixel`, `WritePixel` and `LockBuffer` logic.
+- [ ] **Pixel-Perfect Collision:** Upgrade `ImagesCollide` to use pixel-data checks.
+- [ ] **Image Handling:** Add `MaskImage` (Color Keying) and `GrabImage` refinements.
+
+### Phase 3: System & Determinism
+- [ ] **SeedRnd:** Implement a seedable PRNG for deterministic game logic.
+- [ ] **Timers:** Emulate `CreateTimer` and `WaitTimer` for legacy frame-pacing.
+
+### Phase 4: Language & Tooling
+- [ ] **Goto/Gosub:** Research state-machine transformation for label jumping.
+- [ ] **Bundling:** Create a one-click export for standalone web builds.
+
+### Phase 5: Extensibility & Dynamic Modules
+- [ ] **Dynamic Module Loading:** Implement a system to register external Bonobo modules at runtime.
+- [ ] **Compiler Awareness:** Develop a mechanism for the compiler to discover and map commands from dynamically loaded modules (e.g., via a metadata/manifest file or reflection).

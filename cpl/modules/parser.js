@@ -22,16 +22,41 @@ export class Parser {
 
         while (!this.isAtEnd()) {
             // Skip empty newlines
-            if (this.match('NEWLINE')) continue;
+            if (this.match('NEWLINE') || this.match('OPERATOR', ':')) continue;
 
             const stmt = this.statement();
             if (stmt) {
                 ast.body.push(stmt);
             } else {
-                // Panic mode: Skip token to avoid infinite loop on error
-                this.advance();
+                this.synchronize();
             }
         }
+
+        // --- Hoisting Pass ---
+        // Move Data, Types, and Data-Labels to the top of the AST
+        // to ensure they are initialized before the main code runs.
+        const hoisted = [];
+        const remaining = [];
+        
+        for (let i = 0; i < ast.body.length; i++) {
+            const node = ast.body[i];
+            const nextNode = (i + 1 < ast.body.length) ? ast.body[i+1] : null;
+
+            // Hoist Type Declarations
+            if (node.type === 'TypeDeclaration') {
+                hoisted.push(node);
+            } 
+            // Hoist Data, Functions and Labels immediately preceding Data
+            else if (node.type === 'DataStatement' || 
+                    node.type === 'FunctionDeclaration' ||
+                    (node.type === 'Label' && nextNode && nextNode.type === 'DataStatement')) {
+                hoisted.push(node);
+            } else {
+                remaining.push(node);
+            }
+        }
+        ast.body = hoisted.concat(remaining);
+
         return ast;
     }
 
@@ -49,14 +74,27 @@ export class Parser {
         if (this.match('KEYWORD', 'exit')) return { type: 'ExitStatement' };
         if (this.match('KEYWORD', 'return')) return this.returnStatement();
         if (this.match('KEYWORD', 'select')) return this.selectStatement();
-        if (this.match('KEYWORD', 'end')) return { type: 'EndStatement' };
+
+        // Handle standalone 'End' but don't trip over 'End If', 'End Function' etc. (Case Insensitive)
+        if (this.check('KEYWORD', 'end') && !['if', 'function', 'type', 'select'].includes((this.peek(1).value || '').toLowerCase())) {
+            this.advance();
+            return { type: 'EndStatement' };
+        }
+
         if (this.match('KEYWORD', 'type')) return this.typeDeclaration();
-        if (this.match('KEYWORD', 'delete')) return this.deleteStatement();
         if (this.match('KEYWORD', 'if')) return this.ifStatement();
         if (this.match('KEYWORD', 'for')) return this.forStatement();
         if (this.match('KEYWORD', 'while')) return this.whileStatement();
         if (this.match('KEYWORD', 'repeat')) return this.repeatStatement();
         if (this.match('KEYWORD', 'dim')) return this.dimStatement();
+
+        // Treat 'delete' as a command to use the runtime mapping ($.rtl.deleteObj)
+        if (this.match('KEYWORD', 'delete')) {
+            const token = this.previous();
+            const args = [this.expression()];
+            this.validateCommandArgs(token, args);
+            return { type: 'CommandStatement', command: 'delete', args };
+        }
 
         // 1. Handle Commands (e.g. Graphics 640, 480)
         if (this.match('COMMAND')) {
@@ -79,31 +117,29 @@ export class Parser {
             let node = { type: 'Variable', name };
 
             // Handle Type Suffix (e.g. var.Type)
-            if (this.check('LABEL')) {
-                this.advance();
-            }
+            this.consumeTypeSuffix();
 
             // Check for Array Access
             if (this.check('OPERATOR', '(')) {
                 const symbol = this.symbols.resolve(name);
                 if (symbol && symbol.kind === 'array') {
-                    this.consume('OPERATOR', '(');
+                    this.consume('OPERATOR', '(', "Expected '(' after array name");
                     const indices = [];
                     do {
                         indices.push(this.expression());
                     } while (this.match('OPERATOR', ','));
-                    this.consume('OPERATOR', ')');
+                    this.consume('OPERATOR', ')', "Expected ')' after array indices");
                     node = { type: 'ArrayAccess', name, indices };
                 } else {
                     // Function Call Statement (e.g. UpdateParticles())
-                    this.consume('OPERATOR', '(');
+                    this.consume('OPERATOR', '(', "Expected '(' for function call");
                     const args = [];
                     if (!this.check('OPERATOR', ')')) {
                         do {
                             args.push(this.expression());
                         } while (this.match('OPERATOR', ','));
                     }
-                    this.consume('OPERATOR', ')');
+                    this.consume('OPERATOR', ')', "Expected ')' after function arguments");
                     return { type: 'FunctionCallStatement', name, args };
                 }
             }
@@ -111,7 +147,9 @@ export class Parser {
             // Check for Field Access (chain): obj\field
             while (this.match('OPERATOR', '\\')) {
                 if (this.match('IDENTIFIER')) {
-                    node = { type: 'FieldAccess', object: node, field: this.previous().value };
+                    const fieldName = this.previous().value;
+                    this.consumeTypeSuffix(); // Handle field# or field$
+                    node = { type: 'FieldAccess', object: node, field: fieldName };
                 }
             }
 
@@ -133,6 +171,11 @@ export class Parser {
         if (this.match('LABEL')) {
             return { type: 'Label', name: this.previous().value };
         }
+        
+        // 4. Handle Dot-Labels split by lexer (. Label)
+        if (this.match('OPERATOR', '.') && this.match('IDENTIFIER')) {
+            return { type: 'Label', name: '.' + this.previous().value };
+        }
 
         return null;
     }
@@ -140,7 +183,7 @@ export class Parser {
     globalStatement() {
         if (!this.match('IDENTIFIER')) return null;
         const name = this.previous().value;
-        if (this.check('LABEL')) this.advance();
+        this.consumeTypeSuffix();
         let value = null;
         if (this.match('OPERATOR', '=')) {
             value = this.expression();
@@ -152,7 +195,7 @@ export class Parser {
     localStatement() {
         if (!this.match('IDENTIFIER')) return null;
         const name = this.previous().value;
-        if (this.check('LABEL')) this.advance();
+        this.consumeTypeSuffix();
         let value = null;
         if (this.match('OPERATOR', '=')) {
             value = this.expression();
@@ -178,8 +221,8 @@ export class Parser {
         do {
             if (!this.match('IDENTIFIER')) break;
             const name = this.previous().value;
-            if (this.check('LABEL')) this.advance(); // Skip type suffix
-            this.consume('OPERATOR', '=');
+            this.consumeTypeSuffix();
+            this.consume('OPERATOR', '=', "Expected '=' after constant name");
             const value = this.expression();
             constants.push({ name, value });
         } while (this.match('OPERATOR', ','));
@@ -201,19 +244,21 @@ export class Parser {
                 const name = this.previous().value;
                 let node = { type: 'Variable', name };
                 
-                if (this.check('LABEL')) this.advance();
+                this.consumeTypeSuffix();
                 
                 if (this.check('OPERATOR', '(')) {
-                     this.consume('OPERATOR', '(');
+                     this.consume('OPERATOR', '(', "Expected '('");
                      const indices = [];
                      do { indices.push(this.expression()); } while (this.match('OPERATOR', ','));
-                     this.consume('OPERATOR', ')');
+                     this.consume('OPERATOR', ')', "Expected ')'");
                      node = { type: 'ArrayAccess', name, indices };
                 }
                 
                 while (this.match('OPERATOR', '\\')) {
                     if (this.match('IDENTIFIER')) {
-                        node = { type: 'FieldAccess', object: node, field: this.previous().value };
+                        const fieldName = this.previous().value;
+                        this.consumeTypeSuffix();
+                        node = { type: 'FieldAccess', object: node, field: fieldName };
                     }
                 }
                 variables.push(node);
@@ -252,14 +297,14 @@ export class Parser {
             return null;
         }
         const name = this.previous().value;
-        if (this.check('LABEL')) this.advance();
+        this.consumeTypeSuffix();
         
-        this.consume('OPERATOR', '(');
+        this.consume('OPERATOR', '(', "Expected '(' after Dim");
         const dimensions = [];
         do {
             dimensions.push(this.expression());
         } while (this.match('OPERATOR', ','));
-        this.consume('OPERATOR', ')');
+        this.consume('OPERATOR', ')', "Expected ')' after Dim dimensions");
 
         this.symbols.define(name, 'unknown', 'array', { dimCount: dimensions.length });
         return { type: 'DimStatement', name, dimensions };
@@ -268,7 +313,7 @@ export class Parser {
     typeDeclaration() {
         if (!this.match('IDENTIFIER')) return null;
         const name = this.previous().value;
-        this.consume('NEWLINE');
+        this.consume('NEWLINE', null, "Expected newline after Type name");
         
         const fields = [];
         while (!this.check('KEYWORD', 'end') && !this.isAtEnd()) {
@@ -276,23 +321,18 @@ export class Parser {
                  do {
                      if (this.match('IDENTIFIER')) {
                          const fName = this.previous().value;
-                         if (this.check('LABEL')) this.advance();
+                         this.consumeTypeSuffix();
                          fields.push({ name: fName, type: 'unknown' });
                      }
                  } while (this.match('OPERATOR', ','));
              }
-             this.consume('NEWLINE');
+             this.match('NEWLINE');
         }
-        this.consume('KEYWORD', 'end');
-        this.consume('KEYWORD', 'type');
+        this.consume('KEYWORD', 'end', "Expected 'End Type'");
+        this.consume('KEYWORD', 'type', "Expected 'End Type'");
         
         this.symbols.defineType(name, fields);
         return { type: 'TypeDeclaration', name, fields };
-    }
-
-    deleteStatement() {
-        const expr = this.expression();
-        return { type: 'DeleteStatement', expression: expr };
     }
 
     functionDeclaration() {
@@ -305,7 +345,7 @@ export class Parser {
                 do {
                     if (this.match('IDENTIFIER')) {
                         const pName = this.previous().value;
-                        if (this.check('LABEL')) this.advance();
+                        this.consumeTypeSuffix();
                         parameters.push({ name: pName, type: 'unknown' });
                     }
                 } while (this.match('OPERATOR', ','));
@@ -313,39 +353,39 @@ export class Parser {
             this.consume('OPERATOR', ')');
         }
 
-        this.symbols.defineFunction(name, 'unknown', parameters);
+        const returnType = this.inferType({ type: 'Variable', name });
+        this.symbols.defineFunction(name, returnType, parameters);
         this.symbols.enterScope();
         parameters.forEach(p => this.symbols.define(p.name, p.type, 'variable'));
 
-        this.consume('NEWLINE');
+        while (this.match('NEWLINE') || this.match('COMMENT')); 
         // Parse body until 'End Function'
-        const body = this.block([], () => this.check('KEYWORD', 'end') && this.peek(1).value === 'function');
-        this.consume('KEYWORD', 'end');
-        this.consume('KEYWORD', 'function');
+        const body = this.block([], () => this.checkKeywords(['endfunction']));
+        this.consumeEndFunction();
         
         this.symbols.exitScope();
-        return { type: 'FunctionDeclaration', name, parameters, body };
+        return { type: 'FunctionDeclaration', name, parameters, body, isAsync: true };
     }
 
     selectStatement() {
         const expression = this.expression();
-        this.consume('NEWLINE');
+        this.consume('NEWLINE', null, "Expected newline after Select expression");
         
         const cases = [];
         let defaultCase = null;
 
-        while (!this.check('KEYWORD', 'end') && !this.isAtEnd()) {
+        while (!this.checkKeywords(['endselect']) && !this.isAtEnd()) {
             if (this.match('KEYWORD', 'case')) {
                 const expressions = [];
                 do {
                     expressions.push(this.expression());
                 } while (this.match('OPERATOR', ','));
                 
-                this.consume('NEWLINE');
+                this.match('NEWLINE');
                 const body = this.block(['case', 'default', 'end']);
                 cases.push({ type: 'Case', expressions, body });
             } else if (this.match('KEYWORD', 'default')) {
-                this.consume('NEWLINE');
+                this.match('NEWLINE');
                 defaultCase = this.block(['end', 'case', 'default']);
             } else {
                 if (this.match('NEWLINE')) continue;
@@ -353,8 +393,7 @@ export class Parser {
             }
         }
         
-        this.consume('KEYWORD', 'end');
-        this.consume('KEYWORD', 'select');
+        this.consumeEndSelect();
         
         return { type: 'SelectStatement', expression, cases, defaultCase };
     }
@@ -363,10 +402,11 @@ export class Parser {
 
     ifStatement() {
         const condition = this.expression();
-        this.match('KEYWORD', 'then'); // Optional 'Then'
+        this.match('KEYWORD', 'then');
+        
+        while (this.match('COMMENT')); // Skip comments on the same line
 
-        // Check for Single Line If: If x=1 Then End
-        if (!this.check('NEWLINE')) {
+        if (!this.check('NEWLINE') && !this.isAtEnd()) {
             const thenBranch = [this.statement()];
             let elseBranch = null;
             if (this.match('KEYWORD', 'else')) {
@@ -376,21 +416,23 @@ export class Parser {
         }
 
         // Block If
-        this.consume('NEWLINE');
+        this.consume('NEWLINE', null, "Expected newline after Then");
         const thenBranch = this.block(['endif', 'else', 'elseif']);
         let elseBranch = null;
 
-        // Handle ElseIf (Recursive or Iterative - simplified here as nested Ifs in Else)
-        if (this.match('KEYWORD', 'elseif')) {
-            // Recursively parse the ElseIf as a new IfStatement
+        // Handle ElseIf (Recursive chain)
+        if (this.checkKeywords(['elseif']) || (this.check('KEYWORD', 'else') && (this.peek(1).value || '').toLowerCase() === 'if')) {
+            if (this.match('KEYWORD', 'else')) this.advance(); // consume 'if'
+            else this.match('KEYWORD', 'elseif');
+            
             elseBranch = [this.ifStatement()];
-            // Note: In a full implementation, we might want a flat 'elseIfs' array in the AST
+            return { type: 'IfStatement', condition, thenBranch, elseBranch, mode: 'block' };
         } else if (this.match('KEYWORD', 'else')) {
-            this.consume('NEWLINE');
+            while (this.match('NEWLINE') || this.match('COMMENT'));
             elseBranch = this.block(['endif']);
-            this.consume('KEYWORD', 'endif');
+            this.consumeEndIf();
         } else {
-            this.consume('KEYWORD', 'endif');
+            this.consumeEndIf();
         }
 
         return { type: 'IfStatement', condition, thenBranch, elseBranch, mode: 'block' };
@@ -398,27 +440,29 @@ export class Parser {
 
     forStatement() {
         // For i = 1 To 10 Step 2
-        this.consume('IDENTIFIER');
+        this.consume('IDENTIFIER', null, "Expected variable name after For");
         const variable = this.previous().value;
         
-        if (this.check('LABEL')) {
-            this.advance();
-        }
+        this.consumeTypeSuffix();
         
-        this.consume('OPERATOR', '=');
+        this.consume('OPERATOR', '=', "Expected '=' after For variable");
 
         // Handle For ... Each
         if (this.match('KEYWORD', 'each')) {
              if (!this.match('IDENTIFIER')) return null;
              const typeName = this.previous().value;
-             this.consume('NEWLINE');
+             
+             // Register variable as object in symbol table
+             this.symbols.define(variable, 'object', 'variable');
+
+             this.match('NEWLINE');
              const body = this.block(['next']);
-             this.consume('KEYWORD', 'next');
+             this.consume('KEYWORD', 'next', "Expected 'Next' after For Each block");
              return { type: 'ForEachStatement', variable, typeName, body };
         }
 
         const start = this.expression();
-        this.consume('KEYWORD', 'to');
+        this.consume('KEYWORD', 'to', "Expected 'To' in For statement");
         const end = this.expression();
         
         let step = null;
@@ -426,23 +470,24 @@ export class Parser {
             step = this.expression();
         }
 
-        this.consume('NEWLINE');
+        this.match('NEWLINE');
         const body = this.block(['next']);
-        this.consume('KEYWORD', 'next');
+        this.consume('KEYWORD', 'next', "Expected 'Next' after For block");
+        this.match('IDENTIFIER'); // Optional: Next i
         
         return { type: 'ForStatement', variable, start, end, step, body };
     }
 
     whileStatement() {
         const condition = this.expression();
-        this.consume('NEWLINE');
+        this.match('NEWLINE');
         const body = this.block(['wend']);
-        this.consume('KEYWORD', 'wend');
+        this.consume('KEYWORD', 'wend', "Expected 'Wend' after While block");
         return { type: 'WhileStatement', condition, body };
     }
 
     repeatStatement() {
-        this.consume('NEWLINE');
+        this.match('NEWLINE');
         const body = this.block(['until', 'forever']);
         let condition = null;
         let type = 'Forever';
@@ -451,20 +496,24 @@ export class Parser {
             condition = this.expression();
             type = 'Until';
         } else {
-            this.consume('KEYWORD', 'forever');
+            this.consume('KEYWORD', 'forever', "Expected 'Until' or 'Forever' after Repeat block");
         }
         return { type: 'RepeatStatement', condition, body, loopType: type };
     }
 
     block(terminators, customCheck = null) {
         const statements = [];
-        while (!this.isAtEnd() && !this.checkKeywords(terminators)) {
+        while (!this.isAtEnd()) {
+            if (this.checkKeywords(terminators)) break;
             if (customCheck && customCheck()) break;
 
-            if (this.match('NEWLINE')) continue;
+            if (this.match('NEWLINE') || this.match('OPERATOR', ':') || this.match('COMMENT')) continue;
+
             const stmt = this.statement();
             if (stmt) statements.push(stmt);
-            else this.advance(); // Skip invalid tokens
+            else {
+                this.advance(); // Skip truly unknown tokens
+            }
         }
         return statements;
     }
@@ -586,7 +635,9 @@ export class Parser {
             // Field Access
             while (this.match('OPERATOR', '\\')) {
                 if (this.match('IDENTIFIER')) {
-                    node = { type: 'FieldAccess', object: node, field: this.previous().value };
+                    const fieldName = this.previous().value;
+                    this.consumeTypeSuffix();
+                    node = { type: 'FieldAccess', object: node, field: fieldName };
                 }
             }
             return node;
@@ -612,12 +663,78 @@ export class Parser {
         }
         
         const token = this.peek();
-        const msg = 'Unexpected token: ' + (token ? token.value : 'EOF');
-        this.errors.push({ line: token ? token.line : 0, value: msg });
+        const msg = 'Unexpected token: ' + (token.value || token.type);
+        this.error(msg, token);
         return { type: 'Error', value: msg };
     }
 
     // --- Helper Methods ---
+
+    error(message, token = null) {
+        const t = token || this.peek();
+        const err = {
+            line: t.line,
+            column: t.col || 0,
+            value: message,
+            token: t.value
+        };
+        this.errors.push(err);
+        return null;
+    }
+
+    synchronize() {
+        this.advance();
+        while (!this.isAtEnd()) {
+            if (this.previous().type === 'NEWLINE') return;
+            if (this.peek().type === 'KEYWORD') {
+                if (['if', 'for', 'while', 'repeat', 'function', 'type', 'select', 'data', 'global', 'local'].includes(this.peek().value.toLowerCase())) {
+                    return;
+                }
+            }
+            this.advance();
+        }
+    }
+
+    consumeTypeSuffix() {
+        if (this.check('LABEL')) {
+            this.advance();
+            return true;
+        }
+        if (this.check('OPERATOR', '.') && this.peek(1).type === 'IDENTIFIER') {
+            this.advance(); // .
+            this.advance(); // Identifier
+            return true;
+        }
+        return false;
+    }
+
+    consumeEndIf() {
+        if (this.match('KEYWORD', 'endif')) return true;
+        if (this.check('KEYWORD', 'end') && (this.peek(1).value || '').toLowerCase() === 'if') {
+            this.advance(); // end
+            this.advance(); // if
+            return true;
+        }
+        return false;
+    }
+
+    consumeEndFunction() {
+        if (this.match('KEYWORD', 'endfunction')) return true;
+        if (this.check('KEYWORD', 'end') && (this.peek(1).value || '').toLowerCase() === 'function') {
+            this.advance(); this.advance();
+            return true;
+        }
+        return false;
+    }
+
+    consumeEndSelect() {
+        if (this.match('KEYWORD', 'endselect')) return true;
+        if (this.check('KEYWORD', 'end') && (this.peek(1).value || '').toLowerCase() === 'select') {
+            this.advance(); this.advance();
+            return true;
+        }
+        return false;
+    }
 
     peek(offset = 0) {
         if (this.pos + offset >= this.tokens.length) return this.tokens[this.tokens.length - 1];
@@ -640,7 +757,15 @@ export class Parser {
 
     checkKeywords(keywords) {
         if (this.isAtEnd() || this.peek().type !== 'KEYWORD') return false;
-        return keywords.includes(this.peek().value);
+        const val = this.peek().value.toLowerCase();
+        if (keywords.includes(val)) return true;
+        
+        // Handle "End If", "End Function", etc.
+        if (val === 'end' && this.peek(1).type === 'KEYWORD') {
+            const combined = 'end' + this.peek(1).value.toLowerCase();
+            if (keywords.includes(combined)) return true;
+        }
+        return false;
     }
 
     match(type, value) {
@@ -651,14 +776,10 @@ export class Parser {
         return false;
     }
 
-    consume(type, value) {
-        // Handle optional value argument
-        if (value === undefined && typeof type === 'string' && !['KEYWORD', 'OPERATOR', 'IDENTIFIER', 'NEWLINE'].includes(type)) {
-             // Logic allows consume('NEWLINE') without value
-        }
+    consume(type, value, message) {
         if (this.check(type, value)) return this.advance();
-        // Error handling could be improved here
-        return null; 
+        this.error(message || `Expected ${type} ${value || ''}`);
+        return null;
     }
 
     advance() {
@@ -688,10 +809,15 @@ export class Parser {
                 if ((expected === 'number' && actual === 'boolean') || 
                     (expected === 'boolean' && actual === 'number')) {
                     continue;
+            }
+            // Allow null for objects
+            if (expected === 'object' && actual === 'null') {
+                continue;
                 }
 
                 this.errors.push({
-                    line: token.line || this.peek().line, // Fallback line
+                    line: token.line || this.peek().line,
+                    column: token.col || 0,
                     value: `Type Mismatch in '${token.value}' arg ${i+1}: Expected ${expected}, got ${actual}`
                 });
             }
@@ -703,6 +829,8 @@ export class Parser {
 
         if (node.type === 'Literal') return node.valueType; // 'number', 'string', 'null'
         
+        if (node.type === 'NewExpression') return 'object';
+        
         if (node.type === 'Variable') {
             if (node.name.endsWith('$')) return 'string';
             if (node.name.endsWith('%') || node.name.endsWith('#')) return 'number';
@@ -711,6 +839,41 @@ export class Parser {
             if (sym && sym.type !== 'unknown') return sym.type;
             
             return 'number'; // Default Blitz assumption for variables without suffix
+        }
+        
+        if (node.type === 'UnaryExpression') {
+            // Handle negative numbers (-5)
+            if (node.operator === '-') return this.inferType(node.right);
+            if (node.operator === 'not') return 'boolean';
+        }
+
+        if (node.type === 'FieldAccess') {
+            // Heuristic: If field name ends in $, it's a string, else number
+            if (node.field.endsWith('$')) return 'string';
+            return 'number';
+        }
+
+        if (node.type === 'ArrayAccess') {
+            if (node.name.endsWith('$')) return 'string';
+            const sym = this.symbols.resolve(node.name);
+            if (sym && sym.type !== 'unknown') return sym.type;
+            return 'number';
+        }
+
+        if (node.type === 'FunctionCall') {
+            // Simple heuristic for common return types
+            const name = node.name.toLowerCase();
+            if (name.endsWith('$')) return 'string';
+            if (name.endsWith('%') || name.endsWith('#')) return 'number';
+
+            if (['mid', 'left', 'right', 'upper', 'lower', 'chr', 'hex', 'bin', 'string', 'input', 'currentdate', 'currenttime'].includes(name)) return 'string';
+            
+            // Check symbol table for user-defined functions
+            const sym = this.symbols.resolve(name);
+            if (sym && sym.kind === 'function' && sym.type !== 'unknown') {
+                return sym.type;
+            }
+            return 'number';
         }
 
         if (node.type === 'BinaryExpression') {

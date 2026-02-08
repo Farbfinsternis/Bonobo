@@ -2,7 +2,7 @@ export class Preprocessor {
     constructor() {
     }
 
-    async process(source, rootPath = '') {
+    async process(source, vfs = {}) {
         const lines = source.split(/\r?\n/);
         let output = [];
 
@@ -16,8 +16,8 @@ export class Preprocessor {
                     if (match) {
                         const filename = match[1];
                         try {
-                            const content = await this.loadFile(filename);
-                            const processedContent = await this.process(content, rootPath);
+                            const content = vfs[filename] || await this.loadFile(filename);
+                            const processedContent = await this.process(content, vfs);
                             output.push(`; --- Begin Include: ${filename} ---`);
                             output.push(processedContent);
                             output.push(`; --- End Include: ${filename} ---`);

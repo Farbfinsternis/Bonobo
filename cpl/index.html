@@ -6,13 +6,15 @@
     <title>ApeShift</title>
     <style>
         :root {
-            --bg-dark: #1e1e1e;
-            --bg-panel: #252526;
-            --border: #333;
+            --bg-dark: #121212;
+            --bg-panel: #1e1e1e;
+            --bg-editor: #181818;
+            --border: #3a3a3a;
             --accent: #F57C00;
             --text-main: #cccccc;
             --text-muted: #858585;
             --font-code: 'Consolas', 'Monaco', 'Courier New', monospace;
+            --header-height: 60px;
         }
 
         body {
@@ -27,25 +29,26 @@
             overflow: hidden;
         }
 
-        /* Header */
         header {
-            height: 48px;
-            background-color: #333333;
+            height: var(--header-height);
+            background: linear-gradient(to right, #252526, #333333);
             display: flex;
             align-items: center;
             padding: 0 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
             z-index: 10;
             border-bottom: 1px solid #111;
+            gap: 20px;
         }
 
         .brand {
             font-weight: 400;
-            font-size: 18px;
+            font-size: 22px;
             color: #fff;
             display: flex;
             align-items: center;
             gap: 8px;
+            margin-right: auto;
         }
         
         .brand span {
@@ -53,100 +56,164 @@
             color: var(--accent);
         }
 
-        /* Layout */
         .workspace {
             display: flex;
-            flex-direction: column;
             flex: 1;
-            padding: 10px;
-            gap: 10px;
-            height: calc(100vh - 48px);
+            height: calc(100vh - var(--header-height));
+            overflow: hidden;
+            padding: 15px;
+            gap: 15px;
         }
 
-        .code-pane {
+        .editor-column {
             display: flex;
+            flex-direction: column;
+            width: 40%;
+            min-width: 400px;
+            gap: 15px;
+        }
+
+        .preview-column {
             flex: 1;
-            gap: 10px;
-            min-height: 0;
+            background-color: #000;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            border-radius: 12px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,1);
+            border: 1px solid var(--border);
         }
 
         .panel {
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-height: 0;
             background-color: var(--bg-panel);
+            border-radius: 12px;
             border: 1px solid var(--border);
-            border-radius: 6px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
             overflow: hidden;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
         }
 
         .panel-header {
-            padding: 8px 12px;
-            background-color: #2d2d2d;
-            font-size: 12px;
+            padding: 10px 16px;
+            background-color: rgba(255,255,255,0.03);
+            font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
+            letter-spacing: 1px;
+            font-weight: 700;
             color: var(--text-muted);
-            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            user-select: none;
+            border-bottom: 1px solid var(--border);
         }
 
-        .editor-content {
+        .editor-container {
             flex: 1;
-            position: relative;
+            overflow: hidden;
         }
 
         textarea {
             width: 100%;
             height: 100%;
-            background-color: var(--bg-panel);
+            background-color: var(--bg-editor);
             color: #d4d4d4;
             border: none;
             resize: none;
-            padding: 15px;
+            padding: 12px;
             box-sizing: border-box;
             font-family: var(--font-code);
-            font-size: 14px;
-            line-height: 1.5;
+            font-size: 13px;
+            line-height: 1.4;
             outline: none;
         }
 
-        textarea:focus {
-            background-color: #1f1f1f;
-        }
-
-        /* Syntax Highlighting Colors (Fake) */
         #source { color: #9cdcfe; }
         #js-code { color: #ce9178; }
 
-        .preview-pane {
-            flex: 1;
+        .console-panel {
+            height: 150px;
             background-color: #000;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border-top: 2px solid var(--border);
+            font-family: var(--font-code);
+            font-size: 12px;
+            overflow-y: auto;
+            padding: 10px;
         }
+
+        .console-entry { margin-bottom: 4px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .console-error { color: #f44336; }
+        .console-warn { color: #ffeb3b; }
+        .console-info { color: #4caf50; }
 
         iframe {
             width: 100%;
             height: 100%;
             border: none;
-            display: block;
+            border-radius: 4px;
+            background: transparent;
         }
 
+        .run-hint {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            text-align: center;
+            z-index: 5;
+        }
+
+        .btn {
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            font-size: 13px;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-run {
+            background: linear-gradient(135deg, #4caf50, #2e7d32);
+            color: white;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+            font-size: 14px;
+            padding: 8px 24px;
+        }
+        .btn-run:hover { transform: scale(1.05); box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4); }
+        .btn-run:active { transform: scale(0.95); }
+
+        .btn-download {
+            background-color: rgba(255,255,255,0.05);
+            color: #ccc;
+            border: 1px solid #555;
+        }
+        .btn-download:hover { background-color: rgba(255,255,255,0.1); color: #fff; }
+
+        .btn-zip {
+            background: linear-gradient(135deg, #007acc, #005a9e);
+            color: white;
+        }
+        .btn-zip:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 122, 204, 0.3); }
+
         /* Scrollbars */
-        ::-webkit-scrollbar { width: 10px; height: 10px; }
-        ::-webkit-scrollbar-track { background: var(--bg-dark); }
-        ::-webkit-scrollbar-thumb { background: #424242; border-radius: 5px; border: 2px solid var(--bg-dark); }
-        ::-webkit-scrollbar-thumb:hover { background: #4f4f4f; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
     <header>
@@ -154,13 +221,20 @@
             <img src="logo.svg" alt="Logo" style="height: 32px; width: 32px;">
             <div>Ape<span>Shift</span></div>
         </div>
+        <button id="zip-btn" class="btn btn-zip">Open ZIP Project</button>
+        <input type="file" id="zip-input" accept=".zip" style="display: none;">
+        <button id="run-btn" class="btn btn-run">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12,2C12,2 6,6.67 6,14C6,16 7,18 7,18L5,22H9L10,19H14L15,22H19L17,18C17,18 18,16 18,14C18,6.67 12,2 12,2M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14Z" /></svg>
+            RUN (F5)
+        </button>
+        <button id="download-btn" class="btn btn-download">Download JS</button>
     </header>
 
     <div class="workspace">
-        <div class="code-pane">
+        <div class="editor-column">
             <div class="panel">
                 <div class="panel-header">Blitz2D Source</div>
-                <div class="editor-content">
+                <div class="editor-container">
                     <textarea id="source" spellcheck="false">
 Graphics 640, 480
 
@@ -296,16 +370,161 @@ Data 1,0,0,0,1,0,1,0,0,0,1
             </div>
             <div class="panel">
                 <div class="panel-header">Generated JavaScript</div>
-                <div class="editor-content">
+                <div class="editor-container">
                     <textarea id="js-code" readonly></textarea>
                 </div>
             </div>
+            <div class="panel" style="flex: 0 0 150px;">
+                <div class="panel-header">Console / Problems</div>
+                <div id="console" class="console-panel"></div>
+            </div>
         </div>
-        <div class="preview-pane">
-            <iframe id="game-frame"></iframe>
+        <div class="preview-column">
+            <div id="run-hint" class="run-hint">
+                <div style="margin-bottom: 15px; opacity: 0.2;">
+                    <svg width="80" height="80" viewBox="0 0 24 24" fill="currentColor"><path d="M12,2C12,2 6,6.67 6,14C6,16 7,18 7,18L5,22H9L10,19H14L15,22H19L17,18C17,18 18,16 18,14C18,6.67 12,2 12,2M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14Z" /></svg>
+                </div>
+                <div>Press <span style="color: var(--accent)">RUN</span> to execute the code</div>
+            </div>
+            <iframe id="game-frame" style="display: none;"></iframe>
         </div>
     </div>
 
-    <script type="module" src="./compiler.js"></script>
+    <script type="module">
+        import { Compiler } from './compiler.js';
+
+        const iframe = document.getElementById('game-frame');
+        const sourceArea = document.getElementById('source');
+        const jsArea = document.getElementById('js-code');
+        const consoleArea = document.getElementById('console');
+        const runBtn = document.getElementById('run-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const runHint = document.getElementById('run-hint');
+        const zipBtn = document.getElementById('zip-btn');
+        const zipInput = document.getElementById('zip-input');
+
+        const compiler = new Compiler();
+        let currentBlobUrl = null;
+        let currentAssetMap = {};
+        let currentVFS = {};
+
+        /**
+         * Erzeugt ein virtuelles HTML-Dokument aus dem JS-Code und lädt es in das Iframe.
+         */
+        function executeCode(jsCode, assetMap = {}) {
+            const baseDir = new URL('./', window.location.href).href;
+            
+            const html = [
+                '<!DOCTYPE html><html><head><base href="', baseDir, '">',
+                '<style>body { margin: 0; padding: 0; overflow: hidden; background: transparent; ',
+                'display: flex; justify-content: center; align-items: center; height: 100vh; }</style></head>',
+                '<body>',
+                '<script>window.ASSET_MAP = ', JSON.stringify(assetMap), ';<\/script>',
+                '<script type="module">', jsCode.replace(/<\/script>/g, '<\\/script>'), '<\/script>',
+                '</body></html>'
+            ].join('');
+
+            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+            const blob = new Blob([html], { type: 'text/html' });
+            currentBlobUrl = URL.createObjectURL(blob);
+            iframe.src = currentBlobUrl;
+            iframe.style.display = 'block';
+            runHint.style.display = 'none';
+        }
+
+        async function doCompile() {
+            // Clean HTML entities from source (e.g. &lt; -> <)
+            let source = sourceArea.value
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&');
+            
+            const result = await compiler.compile(source, currentVFS);
+            jsArea.value = result.jsCode;
+            consoleArea.innerHTML = ''; // Clear console
+
+            if (result.errors.length === 0) {
+                logToConsole('Compilation successful!', 'info');
+                executeCode(result.jsCode, currentAssetMap);
+            } else {
+                result.errors.forEach(err => {
+                    const col = err.column !== undefined ? `:${err.column}` : '';
+                    logToConsole(`Line ${err.line}${col} - ${err.value}`, 'error');
+                });
+            }
+        }
+
+        function logToConsole(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `console-entry console-${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            consoleArea.appendChild(div);
+            consoleArea.scrollTop = consoleArea.scrollHeight;
+        }
+
+        zipBtn.addEventListener('click', () => zipInput.click());
+
+        zipInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const zip = await JSZip.loadAsync(file);
+            currentAssetMap = {};
+            currentVFS = {};
+            let mainFile = null;
+
+            for (const [path, zipEntry] of Object.entries(zip.files)) {
+                if (zipEntry.dir) continue;
+
+                if (path.endsWith('.bb')) {
+                    const content = await zipEntry.async('string');
+                    currentVFS[path] = content;
+                    // Heuristik: Die erste .bb Datei oder eine namens 'main.bb' / 'game.bb'
+                    if (!mainFile || path.toLowerCase().includes('main') || path.toLowerCase().includes('game')) {
+                        mainFile = path;
+                    }
+                } else {
+                    // Assets als Blobs speichern
+                    const blob = await zipEntry.async('blob');
+                    currentAssetMap[path] = URL.createObjectURL(blob);
+                }
+            }
+
+            if (mainFile) {
+                sourceArea.value = currentVFS[mainFile];
+                doCompile();
+            }
+        });
+
+        runBtn.addEventListener('click', doCompile);
+
+        downloadBtn.addEventListener('click', () => {
+            const codeToDownload = compiler.getLastJsCode();
+            if (!codeToDownload || compiler.hasErrors()) return;
+            
+            const blob = new Blob([codeToDownload], { type: 'text/javascript' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'apeshift_game.js';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F5') {
+                e.preventDefault();
+                doCompile();
+            }
+        });
+
+        // Clear preview on input (typing or pasting)
+        sourceArea.addEventListener('input', () => {
+            iframe.src = 'about:blank';
+            iframe.style.display = 'none';
+            runHint.style.display = 'flex';
+            jsArea.value = ''; // Clear generated JS to stay in sync
+        });
+    </script>
 </body>
 </html>

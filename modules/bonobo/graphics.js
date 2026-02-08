@@ -53,6 +53,10 @@ export class Graphics{
         this.canvasData.context.save(); // Save initial clean state for Viewport resets
 	}
 
+    get canvas() {
+        return this.canvasData.element;
+    }
+
 	get canvasContext(){
 		return this.canvasData.context;
 	}

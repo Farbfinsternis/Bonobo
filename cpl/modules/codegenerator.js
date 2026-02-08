@@ -6,6 +6,15 @@ export class CodeGenerator {
         this.variables = new Set();
         this.globals = new Set();
         this.isInsideFunction = false;
+        
+        // List of commands that require 'await'
+        this.asyncCommands = new Set([
+            'flip', 'waitkey', 'loadimage', 'loadsound', 'loadmusic', 'loadfont',
+            'readfile', 'writefile', 'readdir', 'copyfile', 'deletefile'
+            // 'delay' and 'input' are handled via command_map 'code' type which already includes await
+        ]);
+        this.userFunctions = new Set();
+        this.importRoot = '..'; // Default path for playground
     }
 
     /**
@@ -14,19 +23,22 @@ export class CodeGenerator {
      * @returns {string}
      */
     generate(ast) {
+        this.indent = 0;
         this.variables.clear();
         this.globals.clear();
         this.isInsideFunction = false;
+        this.userFunctions = new Set(ast.body.filter(n => n.type === 'FunctionDeclaration').map(f => f.name.toLowerCase()));
         if (!ast || ast.type !== 'Program') return '';
 
-        const imports = `import { Bonobo } from "../lib/bonobo.js";
-import * as BonoboModules from "../modules/bonobo/bonobo-modules.js";
-import { Bob } from "../modules/bobs/bob.js";
-import { AssetsManager } from "../modules/assets/assets.js";
-import { TileMap } from "../modules/tilemap/tilemap.js";
-import { InputManager } from "../modules/input/input-manager.js";
-
-`;
+        const imports = [
+            `import { Bonobo } from '${this.importRoot}/lib/bonobo.js';`,
+            `import * as BonoboModules from '${this.importRoot}/modules/bonobo/bonobo-modules.js';`,
+            `import { Bob } from '${this.importRoot}/modules/bobs/bob.js';`,
+            `import { AssetsManager } from '${this.importRoot}/modules/assets/assets.js';`,
+            `import { TileMap } from '${this.importRoot}/modules/tilemap/tilemap.js';`,
+            `import { InputManager } from '${this.importRoot}/modules/input/input-manager.js';`,
+            `import { BlitzRuntime } from '${this.importRoot}/cpl/modules/blitz.runtime.js';`
+        ].join('\n') + '\n\n';
 
         const types = ast.body.filter(n => n.type === 'TypeDeclaration');
         const functions = ast.body.filter(n => n.type === 'FunctionDeclaration');
@@ -85,22 +97,20 @@ import { InputManager } from "../modules/input/input-manager.js";
         // Handle Graphics command specially to pass dims to init
         let gfxWidth = 640;
         let gfxHeight = 480;
-        const filteredInitStatements = [];
         for (const stmt of initStatements) {
             if (stmt.type === 'CommandStatement' && stmt.command.toLowerCase() === 'graphics') {
                 if (stmt.args.length >= 2) {
-                    gfxWidth = this.visitExpression(stmt.args[0]);
-                    gfxHeight = this.visitExpression(stmt.args[1]);
+                    // Only use literals for init configuration to avoid ReferenceErrors with variables
+                    // The actual $.rtl.graphics call later will handle variables correctly if used
+                    if (stmt.args[0].type === 'Literal') gfxWidth = Number(stmt.args[0].value);
+                    if (stmt.args[1].type === 'Literal') gfxHeight = Number(stmt.args[1].value);
                 }
-            } else {
-                filteredInitStatements.push(stmt);
             }
         }
-        initStatements = filteredInitStatements;
 
         let js = imports;
         const globalVarsList = Array.from(this.globals).join(', ');
-        js += `let bonobo, assets, $${globalVarsList ? ', ' + globalVarsList : ''};\n`;
+        js += `let bonobo, assets, $, _initialized = false${globalVarsList ? ', ' + globalVarsList : ''};\n`;
         
         // Generate Consts
         for (const stmt of constStatements) {
@@ -111,7 +121,8 @@ import { InputManager } from "../modules/input/input-manager.js";
 
         // Generate Data
         js += `const _DATA = [${dataList.join(', ')}];\n`;
-        js += `const _LABELS = ${JSON.stringify(labelMap)};\n`;
+        const labelEntries = Object.entries(labelMap).map(([k, v]) => `'${k}': ${v}`);
+        js += `const _LABELS = { ${labelEntries.join(', ')} };\n`;
         js += `let _dataPtr = 0;\n`;
 
         // Types
@@ -121,32 +132,28 @@ import { InputManager } from "../modules/input/input-manager.js";
         js += functions.map(f => this.visit(f)).join('\n') + '\n';
 
         // Main Setup
-        js += `
-async function main() {
-    bonobo = new Bonobo({ loop: loop });
-    bonobo.appName("Bonobo Game");
-    assets = new AssetsManager(bonobo);
-    
-    // Init Core Modules
-    $ = BonoboModules.init(bonobo, ${gfxWidth}, ${gfxHeight});
-    Object.assign(bonobo, $);
-    bonobo.register($.keys);
-    bonobo.register($.mouse);
-    
-    // Init Optional Modules and attach to $ for easy access via commands
-    $.bob = new Bob(bonobo);
-    $.map = new TileMap(bonobo);
-    $.input = new InputManager(bonobo);
-
-    // --- User Init ---
-`;
+        js += 'async function main() {\n';
+        js += '    bonobo = new Bonobo({ loop: loop });\n';
+        js += "    bonobo.appName('ApeShift Game');\n";
+        js += '    assets = new AssetsManager(bonobo);\n';
+        js += `    $ = BonoboModules.init(bonobo, ${gfxWidth}, ${gfxHeight});\n`;
+        js += '    Object.assign(bonobo, $);\n';
+        js += '    bonobo.register($.keys);\n';
+        js += '    bonobo.register($.mouse);\n';
+        js += '    $.bob = new Bob(bonobo);\n';
+        js += '    $.map = new TileMap(bonobo);\n';
+        js += '    $.input = new InputManager(bonobo);\n';
+        js += '    $.rtl = new BlitzRuntime(bonobo);\n';
+        js += '    bonobo.start();\n';
+        js += '\n    // --- User Init ---\n';
         js += this.generateBlock(initStatements) + '\n';
-        js += `\n    bonobo.start();\n}\n`;
+        js += `\n    _initialized = true;\n}\n`;
 
         // Main Loop
         js += '\n// --- Main Loop ---\n';
-        js += 'function loop() {\n';
+        js += 'async function loop() {\n';
         this.indent++;
+        js += `${this.getIndent()}if (!_initialized) return;\n`;
         
         if (mainLoopNode) {
             // We wrap the body in the loop condition to preserve logic (e.g. While Not KeyHit(1))
@@ -165,7 +172,7 @@ async function main() {
         this.indent--;
         js += '}\n';
 
-        js += `\ndocument.addEventListener("DOMContentLoaded", main);`;
+        js += "\nmain();";
 
         return js;
     }
@@ -254,16 +261,19 @@ async function main() {
                 const args = node.args.map(arg => this.visitExpression(arg)).join(', ');
                 const argsArray = node.args.map(arg => this.visitExpression(arg));
                 const config = this.getCommandConfig(node.command);
+                
+                const prefix = this.asyncCommands.has(node.command.toLowerCase()) ? 'await ' : '';
 
-                if (config.type === 'code') return `${this.getIndent()}${config.target}`;
+                if (config.type === 'code') return `${this.getIndent()}${prefix}${config.target}`;
 
                 const finalArgs = config.mapArgs ? config.mapArgs(argsArray) : argsArray;
-                return `${this.getIndent()}${config.target}(${finalArgs.join(', ')});`;
+                return `${this.getIndent()}${prefix}${config.target}(${finalArgs.join(', ')});`;
             }
 
             case 'FunctionCallStatement': {
+                const prefix = this.userFunctions.has(node.name.toLowerCase()) ? 'await ' : '';
                 const args = node.args.map(arg => this.visitExpression(arg));
-                return `${this.getIndent()}${this.cleanName(node.name)}(${args.join(', ')});`;
+                return `${this.getIndent()}${prefix}${this.cleanName(node.name)}(${args.join(', ')});`;
             }
 
             case 'Assignment': {
@@ -311,7 +321,7 @@ async function main() {
             }
 
             case 'RestoreStatement':
-                return `${this.getIndent()}_dataPtr = _LABELS["${node.label.toLowerCase()}"] || 0;`;
+                return `${this.getIndent()}_dataPtr = _LABELS['${node.label.toLowerCase()}'] || 0;`;
 
             case 'ExitStatement':
                 return `${this.getIndent()}break;`;
@@ -332,7 +342,7 @@ async function main() {
                 const cleanName = this.cleanName(node.name);
                 if (!this.variables.has(cleanName)) this.variables.add(cleanName);
                 
-                const dims = node.dimensions.map(d => this.visitExpression(d));
+                const dims = node.dimensions.map(d => this.visitExpression(d)); // Note: Expressions inside Dim usually sync
                 let fillVal = '0';
                 if (node.name.endsWith('$')) fillVal = '""';
                 
@@ -447,12 +457,10 @@ async function main() {
             case 'ForEachStatement': {
                 const v = this.cleanName(node.variable);
                 const type = this.cleanName(node.typeName);
-                if (!this.variables.has(v)) this.variables.add(v);
                 
-                let loopVar = v;
-                if (!this.variables.has(v) && !this.globals.has(v)) {
-                     loopVar = `var ${v}`;
-                }
+                let loopVar = this.variables.has(v) || this.globals.has(v) ? v : `var ${v}`;
+                if (!this.variables.has(v)) this.variables.add(v);
+
                 let forCode = `${this.getIndent()}for (${loopVar} of ${type}.list) {\n`;
                 this.indent++;
                 forCode += this.generateBlock(node.body) + '\n';
@@ -489,11 +497,11 @@ async function main() {
                 const oldInFunc = this.isInsideFunction;
                 this.variables = new Set(this.globals);
                 this.isInsideFunction = true;
-                
+                // TODO: Detect if function needs to be async (contains async calls)
                 const params = node.parameters.map(p => this.cleanName(p.name)).join(', ');
                 node.parameters.forEach(p => this.variables.add(this.cleanName(p.name)));
 
-                let funcCode = `${this.getIndent()}function ${node.name}(${params}) {\n`;
+                let funcCode = `${this.getIndent()}async function ${this.cleanName(node.name)}(${params}) {\n`;
                 this.indent++;
                 funcCode += this.generateBlock(node.body) + '\n';
                 this.indent--;
@@ -505,7 +513,7 @@ async function main() {
             }
 
             case 'TypeDeclaration': {
-                const fields = node.fields.map(f => `this.${this.cleanName(f.name)} = ${f.name.endsWith('$') ? '""' : '0'};`).join(' ');
+                const fields = node.fields.map(f => `this.${this.cleanName(f.name)} = ${f.name.endsWith('$') ? "''" : '0'};`).join(' ');
                 const name = this.cleanName(node.name);
                 return `${this.getIndent()}class ${name} { constructor() { ${fields} ${name}.list.push(this); } }\n${this.getIndent()}${name}.list = [];`;
             }
@@ -560,11 +568,12 @@ async function main() {
             case 'FunctionCall':
                 const argsArray = node.args.map(arg => this.visitExpression(arg));
                 const config = this.getCommandConfig(node.name);
+                const prefix = (this.asyncCommands.has(node.name.toLowerCase()) || this.userFunctions.has(node.name.toLowerCase())) ? 'await ' : '';
 
                 if (config.type === 'property') return config.target;
 
                 const finalArgs = config.mapArgs ? config.mapArgs(argsArray) : argsArray;
-                return `${config.target}(${finalArgs.join(', ')})`;
+                return `${prefix}${config.target}(${finalArgs.join(', ')})`;
 
             case 'NewExpression':
                 return `new ${this.cleanName(node.typeName)}()`;
@@ -577,7 +586,7 @@ async function main() {
                 return `${this.cleanName(node.name)}${idxs}`;
 
             case 'Literal':
-                if (node.valueType === 'string') return `"${node.value}"`;
+                if (node.valueType === 'string') return `\`${node.value.replace(/`/g, '\\`').replace(/\${/g, '\\${')}\``;
                 if (node.valueType === 'null') return 'null';
                 return node.value;
 
@@ -611,7 +620,7 @@ async function main() {
         const lower = name.toLowerCase();
         const entry = commandMap[lower];
         
-        if (!entry) return { target: name, type: 'function' };
+        if (!entry) return { target: this.cleanName(name), type: 'function' };
         
         if (typeof entry === 'string') {
             return { target: entry, type: 'function' };
@@ -628,8 +637,14 @@ async function main() {
      * Helper to detect if a statement block contains a 'Flip' command
      */
     hasFlip(node) {
-        if (!node.body) return false;
-        // Simple check: look for top-level Flip in the loop body
-        return node.body.some(s => s.type === 'CommandStatement' && s.command.toLowerCase() === 'flip');
+        if (!node) return false;
+        if (node.type === 'CommandStatement' && node.command.toLowerCase() === 'flip') return true;
+        if (Array.isArray(node)) return node.some(n => this.hasFlip(n));
+        if (node.body) return this.hasFlip(node.body);
+        if (node.thenBranch) return this.hasFlip(node.thenBranch) || this.hasFlip(node.elseBranch);
+        if (node.elseBranch) return this.hasFlip(node.elseBranch);
+        if (node.cases) return node.cases.some(c => this.hasFlip(c.body));
+        if (node.defaultCase) return this.hasFlip(node.defaultCase);
+        return false;
     }
 }

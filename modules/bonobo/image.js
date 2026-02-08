@@ -78,8 +78,14 @@ export class Image{
         img.height = height;
         img.tileWidth = width;
         img.tileHeight = height;
+
+        // Create a canvas for the image data so it can be drawn upon
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        img.data = canvas;
+
         img.loaded = true;
-        // Data will be filled by grabImage or remains empty/null until then
         return img;
     }
 

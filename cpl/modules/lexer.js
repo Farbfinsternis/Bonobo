@@ -1,4 +1,4 @@
-import { commands } from './commands.js';
+import { commandMap } from './command_map.js';
 
 export class Lexer {
     /**
@@ -21,7 +21,7 @@ export class Lexer {
             "true", "false", "pi"
         ]);
 
-        this.commands = commands;
+        this.commands = new Set(Object.keys(commandMap));
         this.errors = [];
     }
 

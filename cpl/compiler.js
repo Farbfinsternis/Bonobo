@@ -11,23 +11,12 @@ export class Compiler {
 		this.preprocessor = new Preprocessor();
 		this.output = [];
 		this.errors = [];
-		this.jsOutputElement = document.getElementById("js-code");
-		this.gameFrame = document.getElementById("game-frame");
-		this.init();
+		this.lastJsCode = '';
 	}
 
-	init() {
-		document.getElementById("source").addEventListener("input", (e) => {
-			this.compile(e.target.value);
-		});
-		// Initial compile
-		this.compile(document.getElementById("source").value);
-	}
-
-	async compile(source) {
-		// 1. Preprocessing (Includes auflösen)
+	async compile(source, vfs = {}) {
 		try {
-			source = await this.preprocessor.process(source);
+			source = await this.preprocessor.process(source, vfs);
 		} catch (e) {
 			console.error("Preprocessing failed:", e);
 		}
@@ -47,39 +36,27 @@ export class Compiler {
 		}
 
 		// 4. Code Generation
-		const jsCode = this.generator.generate(ast);
+		let jsCode = this.generator.generate(ast);
+		this.lastJsCode = jsCode;
 
-		// Display JS
-		this.jsOutputElement.value = jsCode;
-
-		if (this.errors.length > 0) {
-			console.error(this.errors);
-			// Optional: Show errors in UI
-			return;
-		}
-
-		// Run in Iframe
-		this.run(jsCode);
+		return {
+			jsCode,
+			errors: this.errors,
+			ast
+		};
 	}
 
-	run(jsCode) {
-		const html = `
-			<!DOCTYPE html>
-			<html>
-			<head>
-				<style>body { margin: 0; overflow: hidden; background: #000; }</style>
-			</head>
-			<body>
-				<script type="module">
-					${jsCode}
-				</script>
-			</body>
-			</html>
-		`;
-		this.gameFrame.srcdoc = html;
+	/**
+	 * Gibt den zuletzt erfolgreich (oder versuchten) generierten Code zurück.
+	 */
+	getLastJsCode() {
+		return this.lastJsCode;
+	}
+
+	/**
+	 * Prüft, ob die letzte Kompilierung Fehler enthielt.
+	 */
+	hasErrors() {
+		return this.errors.length > 0;
 	}
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-	const compiler = new Compiler();
-});

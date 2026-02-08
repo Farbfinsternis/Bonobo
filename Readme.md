@@ -71,6 +71,14 @@ Input Mapping: Automatic translation of legacy Blitz2D keycodes and mouse button
 Smart Mapping: Intelligent argument conversion for graphics commands.
 Auto-Init: Automatic registration of core modules (Keys, Mouse) in the generated code.
 
+### Blitz2D Compatibility Status
+ApeShift offers **near-complete syntax support** for the BlitzBasic language, while the command set (API) is focused on core 2D gameplay.
+
+*   **Language Syntax (~95%):** Full control flow, complex nesting, Types (auto-lists), Arrays (Dim), Data/Read/Restore, and Type Suffixes.
+*   **Command Set (~65%):** 2D primitives, Image handling (including Offscreen-Buffers), Input (Keyboard/Mouse/Joy), and Math/Strings are well supported.
+*   **In Progress:** Binary file I/O (`ReadInt`, `WriteInt`), Bank system (`CreateBank`), and pixel-perfect collision.
+*   **Limitations:** Legacy system commands (e.g., `SystemProperty`) and low-level hardware graphics mode queries are limited or require polyfills in the browser context.
+
 To try the compiler, open cpl/index.html in your browser.
 
 ## 📂 Structure

@@ -178,4 +178,22 @@ export class Maths{
     floor(v){
         return Math.floor(v);
     }
+
+    /**
+     * Returns the highest value of the given arguments.
+     * @param {...number} args 
+     * @returns {number}
+     */
+    max(...args){
+        return Math.max(...args);
+    }
+
+    /**
+     * Returns the lowest value of the given arguments.
+     * @param {...number} args 
+     * @returns {number}
+     */
+    min(...args){
+        return Math.min(...args);
+    }
 }

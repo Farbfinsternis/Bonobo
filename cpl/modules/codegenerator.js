@@ -167,8 +167,6 @@ export class CodeGenerator {
             }
         }
         
-        js += `${this.getIndent()}$.rtl.update();\n`;
-
         this.indent--;
         js += '}\n';
 

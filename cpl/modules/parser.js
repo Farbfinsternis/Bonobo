@@ -525,7 +525,7 @@ export class Parser {
             if (this.checkKeywords(terminators)) break;
             if (customCheck && customCheck()) break;
 
-            if (this.match('NEWLINE') || this.match('OPERATOR', ':') || this.match('COMMENT')) continue;
+            if (this.match('NEWLINE') || this.match('OPERATOR', ':')) continue;
 
             const stmt = this.statement();
             if (stmt) statements.push(stmt);
@@ -818,8 +818,18 @@ export class Parser {
         const name = token.value.toLowerCase();
         const config = commandMap[name];
         
-        // Wenn kein Mapping oder keine Params definiert sind, ignorieren wir es
-        if (!config || !config.params) return;
+        if (!config) return;
+
+        if (config.type === 'unsupported') {
+            this.errors.push({
+                line: token.line || this.peek().line,
+                column: token.col || 0,
+                value: `Command '${token.value}' is not supported in ApeShift.`
+            });
+            return;
+        }
+
+        if (!config.params) return;
 
         // Wir prüfen nur so viele Argumente wie übergeben wurden (wegen optionaler Parameter)
         // Aber nicht mehr als definiert sind.
@@ -852,52 +862,49 @@ export class Parser {
     inferType(node) {
         if (!node) return 'unknown';
 
+        // 1. Nutze bereits ermittelten Typ aus dem Parsing-Pass
+        if (node.dataType && node.dataType !== 'unknown') return node.dataType;
+
         if (node.type === 'Literal') return node.valueType; // 'number', 'string', 'null'
         
         if (node.type === 'NewExpression') return 'object';
         
         if (node.type === 'Variable') {
-            if (node.name.endsWith('$')) return 'string';
-            if (node.name.endsWith('%') || node.name.endsWith('#')) return 'number';
-            
             const sym = this.symbols.resolve(node.name);
             if (sym && sym.type !== 'unknown') return sym.type;
             
+            if (node.name.endsWith('$')) return 'string';
             return 'number'; // Default Blitz assumption for variables without suffix
         }
         
         if (node.type === 'UnaryExpression') {
-            // Handle negative numbers (-5)
             if (node.operator === '-') return this.inferType(node.right);
             if (node.operator === 'not') return 'boolean';
         }
 
         if (node.type === 'FieldAccess') {
-            // Heuristic: If field name ends in $, it's a string, else number
             if (node.field.endsWith('$')) return 'string';
             return 'number';
         }
 
         if (node.type === 'ArrayAccess') {
-            if (node.name.endsWith('$')) return 'string';
             const sym = this.symbols.resolve(node.name);
             if (sym && sym.type !== 'unknown') return sym.type;
+            if (node.name.endsWith('$')) return 'string';
             return 'number';
         }
 
         if (node.type === 'FunctionCall') {
-            // Simple heuristic for common return types
             const name = node.name.toLowerCase();
-            if (name.endsWith('$')) return 'string';
-            if (name.endsWith('%') || name.endsWith('#')) return 'number';
-
-            if (['mid', 'left', 'right', 'upper', 'lower', 'chr', 'hex', 'bin', 'string', 'input', 'currentdate', 'currenttime'].includes(name)) return 'string';
+            const config = commandMap[name];
+            if (config && config.returnType) return config.returnType;
             
             // Check symbol table for user-defined functions
             const sym = this.symbols.resolve(name);
             if (sym && sym.kind === 'function' && sym.type !== 'unknown') {
                 return sym.type;
             }
+            if (name.endsWith('$')) return 'string';
             return 'number';
         }
 

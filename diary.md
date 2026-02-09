@@ -1,16 +1,24 @@
-## Session: Hardening & Core Feature Completion
+# ApeShift & Bonobo Development Diary
 
-### Compiler (ApeShift)
-- **Stability Fixes:** Korrektur eines Absturzes in der `analyzeAsync`-Phase. Funktionen werden nun initial als synchron markiert und erst bei Bedarf "infiziert".
-- **Type Inference:** Das Typ-System nutzt nun aktiv die Metadaten der `command_map.js` (`returnType`), was die Präzision bei der Code-Generierung massiv erhöht.
-- **Variable Collisions:** `cleanName` wurde gehärtet. Variablen mit unterschiedlichen Suffixen (z.B. `score%` und `score$`) werden nun zu eindeutigen JS-Namen (`score_i`, `score_s`) aufgelöst, um Kollisionen zu vermeiden.
-- **Comment Preservation:** Kommentare aus dem Blitz-Quellcode werden nun zuverlässig in den AST übernommen und im generierten JavaScript an der richtigen Stelle ausgegeben.
+## Project Principles
+- **Bonobo:** Modern, independent Game Engine. Must remain usable without the compiler.
+- **ApeShift:** Blitz2D to JavaScript Compiler.
+- **Strict Separation:** No compiler-specific hacks in the engine core.
+- **UI Policy:** NO ZIP UPLOAD BUTTON. The playground is for single-file live coding.
 
-### Engine & RTL (Bonobo)
-- **Strict Separation:** Die `BlitzRuntime` (RTL) ist nun vollständig vom Bonobo-Kern entkoppelt. Module werden explizit übergeben, anstatt die Engine-Instanz zu manipulieren.
-- **Binary & Memory:** Das `Bank`-Modul wurde vervollständigt (jetzt mit `Int16` Support für Shorts). `FileStream` unterstützt nun auch `ReadShort`, `WriteShort` sowie `readLine`/`writeLine`.
-- **Deterministic Math:** Die `math.js` verfügt nun über einen LCG-basierten Zufallsgenerator. `SeedRnd` ermöglicht nun exakt reproduzierbare Spielabläufe.
-- **Collision Fixes:** Parameter-Mappings für `ImageRectCollide` in der `command_map.js` korrigiert.
+## Session: 2024-05-22 - Environment Discrepancy & UI Cleanup
 
-### Status
-Der Compiler ist nun "abgehärtet". Die Kern-Logik (Typen, Listen, Binär-Daten, Async) ist stabil. Nächster großer Meilenstein ist die Transformation von `Goto`/`Gosub` in eine State-Machine.
+### Current Status
+- **Local Environment:** Works perfectly using `npx vite`.
+- **Production Environment (all-inkl):** Currently broken.
+  - Issue 1: HTTP 403 Forbidden errors. Likely due to case-sensitivity (Linux) or security rules regarding directory traversal (`../../`).
+  - Issue 2: "Critical Error: Compiler failed to return a valid result object." This suggests the `Compiler` class or its dependencies are not loading correctly on the server.
+
+### Regressions Fixed
+- **ZIP Upload Button:** Permanently removed from `index.html` (HTML and JS).
+- **Compiler Robustness:** Added `try-catch` to `compiler.js` and improved result validation in `index.html`.
+- **Version Output:** Restored `static VERSION = "0.4.0"` in `Compiler`.
+
+### Next Steps
+- Investigate Apache `.htaccess` for all-inkl to allow module imports.
+- Ensure all file imports use consistent lower-case naming to avoid Linux case-sensitivity issues.

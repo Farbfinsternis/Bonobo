@@ -29,7 +29,6 @@ async function main(){
     // 2. Initialize the modules
     // Use the helper to init all core modules at once
     const modules = $.init(bonobo, "*");
-    Object.assign(bonobo, modules); // Make modules accessible via bonobo instance (required for InputManager)
     ({ keys, mouse, gfx, draw, sound, font, collision, joy, files } = modules);
     
     bob = new Bob(bonobo);

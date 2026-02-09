@@ -10,10 +10,10 @@ export class CodeGenerator {
         // List of commands that require 'await'
         this.asyncCommands = new Set([
             'flip', 'waitkey', 'loadimage', 'loadsound', 'loadmusic', 'loadfont',
-            'readfile', 'writefile', 'readdir', 'copyfile', 'deletefile'
+            'readfile', 'writefile', 'readdir', 'copyfile', 'deletefile', 'delay', 'input'
             // 'delay' and 'input' are handled via command_map 'code' type which already includes await
         ]);
-        this.userFunctions = new Set();
+        this.asyncUserFunctions = new Set();
         this.importRoot = '..'; // Default path for playground
     }
 
@@ -27,18 +27,22 @@ export class CodeGenerator {
         this.variables.clear();
         this.globals.clear();
         this.isInsideFunction = false;
-        this.userFunctions = new Set(ast.body.filter(n => n.type === 'FunctionDeclaration').map(f => f.name.toLowerCase()));
+
+        this.asyncUserFunctions = new Set(
+            ast.body
+                .filter(n => n.type === 'FunctionDeclaration' && n.isAsync)
+                .map(f => f.name.toLowerCase())
+        );
         if (!ast || ast.type !== 'Program') return '';
 
-        const imports = [
+        const importList = [
             `import { Bonobo } from '${this.importRoot}/lib/bonobo.js';`,
-            `import * as BonoboModules from '${this.importRoot}/modules/bonobo/bonobo-modules.js';`,
-            `import { Bob } from '${this.importRoot}/modules/bobs/bob.js';`,
-            `import { AssetsManager } from '${this.importRoot}/modules/assets/assets.js';`,
-            `import { TileMap } from '${this.importRoot}/modules/tilemap/tilemap.js';`,
-            `import { InputManager } from '${this.importRoot}/modules/input/input-manager.js';`,
-            `import { BlitzRuntime } from '${this.importRoot}/cpl/modules/blitz.runtime.js';`
-        ].join('\n') + '\n\n';
+            `import * as BonoboModules from '${this.importRoot}/modules/bonobo/bonobo-modules.js';`
+        ];
+
+        importList.push(`import { BlitzRuntime } from '${this.importRoot}/cpl/modules/blitz.runtime.js';`);
+
+        const imports = importList.join('\n') + '\n\n';
 
         const types = ast.body.filter(n => n.type === 'TypeDeclaration');
         const functions = ast.body.filter(n => n.type === 'FunctionDeclaration');
@@ -110,7 +114,8 @@ export class CodeGenerator {
 
         let js = imports;
         const globalVarsList = Array.from(this.globals).join(', ');
-        js += `let bonobo, assets, $, _initialized = false${globalVarsList ? ', ' + globalVarsList : ''};\n`;
+        
+        js += `let bonobo, $, _initialized = false${globalVarsList ? ', ' + globalVarsList : ''};\n`;
         
         // Generate Consts
         for (const stmt of constStatements) {
@@ -135,15 +140,8 @@ export class CodeGenerator {
         js += 'async function main() {\n';
         js += '    bonobo = new Bonobo({ loop: loop });\n';
         js += "    bonobo.appName('ApeShift Game');\n";
-        js += '    assets = new AssetsManager(bonobo);\n';
         js += `    $ = BonoboModules.init(bonobo, ${gfxWidth}, ${gfxHeight});\n`;
-        js += '    Object.assign(bonobo, $);\n';
-        js += '    bonobo.register($.keys);\n';
-        js += '    bonobo.register($.mouse);\n';
-        js += '    $.bob = new Bob(bonobo);\n';
-        js += '    $.map = new TileMap(bonobo);\n';
-        js += '    $.input = new InputManager(bonobo);\n';
-        js += '    $.rtl = new BlitzRuntime(bonobo);\n';
+        js += '    $.rtl = new BlitzRuntime(bonobo, $);\n';
         js += '    bonobo.start();\n';
         js += '\n    // --- User Init ---\n';
         js += this.generateBlock(initStatements) + '\n';
@@ -169,6 +167,8 @@ export class CodeGenerator {
             }
         }
         
+        js += `${this.getIndent()}$.rtl.update();\n`;
+
         this.indent--;
         js += '}\n';
 
@@ -264,6 +264,10 @@ export class CodeGenerator {
                 
                 const prefix = this.asyncCommands.has(node.command.toLowerCase()) ? 'await ' : '';
 
+                if (config.type === 'unsupported') {
+                    return '';
+                }
+
                 if (config.type === 'code') return `${this.getIndent()}${prefix}${config.target}`;
 
                 const finalArgs = config.mapArgs ? config.mapArgs(argsArray) : argsArray;
@@ -271,7 +275,7 @@ export class CodeGenerator {
             }
 
             case 'FunctionCallStatement': {
-                const prefix = this.userFunctions.has(node.name.toLowerCase()) ? 'await ' : '';
+                const prefix = this.asyncUserFunctions.has(node.name.toLowerCase()) ? 'await ' : '';
                 const args = node.args.map(arg => this.visitExpression(arg));
                 return `${this.getIndent()}${prefix}${this.cleanName(node.name)}(${args.join(', ')});`;
             }
@@ -294,10 +298,13 @@ export class CodeGenerator {
             }
 
             case 'ConstStatement':
-                return `${this.getIndent()}// Const declared at top`;
+                return '';
 
             case 'DataStatement':
-                return `${this.getIndent()}// Data`;
+                return '';
+
+            case 'Comment':
+                return `${this.getIndent()}// ${node.value}`;
 
             case 'ReadStatement': {
                 let code = '';
@@ -501,7 +508,7 @@ export class CodeGenerator {
                 const params = node.parameters.map(p => this.cleanName(p.name)).join(', ');
                 node.parameters.forEach(p => this.variables.add(this.cleanName(p.name)));
 
-                let funcCode = `${this.getIndent()}async function ${this.cleanName(node.name)}(${params}) {\n`;
+                let funcCode = `${this.getIndent()}${node.isAsync ? 'async ' : ''}function ${this.cleanName(node.name)}(${params}) {\n`;
                 this.indent++;
                 funcCode += this.generateBlock(node.body) + '\n';
                 this.indent--;
@@ -518,9 +525,10 @@ export class CodeGenerator {
                 return `${this.getIndent()}class ${name} { constructor() { ${fields} ${name}.list.push(this); } }\n${this.getIndent()}${name}.list = [];`;
             }
 
-            case 'DeleteStatement': {
-                const dObj = this.visitExpression(node.expression);
-                return `${this.getIndent()}{ const _obj = ${dObj}; if (_obj && _obj.constructor && _obj.constructor.list) { const _idx = _obj.constructor.list.indexOf(_obj); if (_idx !== -1) _obj.constructor.list.splice(_idx, 1); } }`;
+            case 'InsertStatement': {
+                const obj = this.visitExpression(node.object);
+                const target = this.visitExpression(node.target);
+                return `${this.getIndent()}$.rtl.insert(${obj}, ${target}, ${node.isBefore});`;
             }
 
             case 'ReturnStatement': {
@@ -531,19 +539,19 @@ export class CodeGenerator {
             }
 
             case 'EndStatement':
-                return `${this.getIndent()}// End`;
+                return '';
 
             case 'GotoStatement':
-                return `${this.getIndent()}// Goto ${node.label} (Not supported)`;
+                return '';
 
             case 'GosubStatement':
-                return `${this.getIndent()}// Gosub ${node.label} (Not supported)`;
+                return '';
 
             case 'Label':
-                return `${this.getIndent()}// Label: ${node.name}`;
+                return '';
 
             default:
-                return `${this.getIndent()}// Unknown node type: ${node.type}`;
+                return '';
         }
     }
 
@@ -568,7 +576,7 @@ export class CodeGenerator {
             case 'FunctionCall':
                 const argsArray = node.args.map(arg => this.visitExpression(arg));
                 const config = this.getCommandConfig(node.name);
-                const prefix = (this.asyncCommands.has(node.name.toLowerCase()) || this.userFunctions.has(node.name.toLowerCase())) ? 'await ' : '';
+                const prefix = (this.asyncCommands.has(node.name.toLowerCase()) || this.asyncUserFunctions.has(node.name.toLowerCase())) ? 'await ' : '';
 
                 if (config.type === 'property') return config.target;
 
@@ -597,10 +605,10 @@ export class CodeGenerator {
                 return `(${this.visitExpression(node.expression)})`;
 
             case 'Error':
-                return `null /* Syntax Error: ${node.value} */`;
+                return `null`;
 
             default:
-                return `null /* Unknown Expression: ${node.type} */`;
+                return `null`;
         }
     }
 
@@ -610,7 +618,9 @@ export class CodeGenerator {
 
     cleanName(name) {
         if (!name) return name;
-        return name.replace(/[%#$]/g, '');
+        let cleaned = name;
+        if (!/[%#$]$/.test(cleaned)) cleaned += '%';
+        return cleaned.replace(/%/g, '_i').replace(/#/g, '_f').replace(/\$/g, '_s');
     }
 
     /**

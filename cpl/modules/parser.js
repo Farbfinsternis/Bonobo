@@ -32,32 +32,99 @@ export class Parser {
             }
         }
 
-        // --- Hoisting Pass ---
-        // Move Data, Types, and Data-Labels to the top of the AST
-        // to ensure they are initialized before the main code runs.
+        return ast;
+    }
+
+    /**
+     * Multi-Pass: Reorganizes the AST (Hoisting)
+     * Ensures Types, Functions, and Data (with their labels) are at the top.
+     */
+    hoist(ast) {
         const hoisted = [];
         const remaining = [];
-        
-        for (let i = 0; i < ast.body.length; i++) {
-            const node = ast.body[i];
-            const nextNode = (i + 1 < ast.body.length) ? ast.body[i+1] : null;
+        const dataLabels = new Set();
 
-            // Hoist Type Declarations
-            if (node.type === 'TypeDeclaration') {
-                hoisted.push(node);
-            } 
-            // Hoist Data, Functions and Labels immediately preceding Data
-            else if (node.type === 'DataStatement' || 
-                    node.type === 'FunctionDeclaration' ||
-                    (node.type === 'Label' && nextNode && nextNode.type === 'DataStatement')) {
+        // Pass 1: Identify all labels that precede DataStatements
+        for (let i = 0; i < ast.body.length; i++) {
+            if (ast.body[i].type === 'DataStatement') {
+                let j = i - 1;
+                while (j >= 0 && ast.body[j].type === 'Label') {
+                    dataLabels.add(ast.body[j]);
+                    j--;
+                }
+            }
+        }
+
+        // Pass 2: Partition the AST
+        for (const node of ast.body) {
+            const isHoisted = 
+                node.type === 'TypeDeclaration' || 
+                node.type === 'FunctionDeclaration' || 
+                node.type === 'DataStatement' || 
+                dataLabels.has(node);
+
+            if (isHoisted) {
                 hoisted.push(node);
             } else {
                 remaining.push(node);
             }
         }
         ast.body = hoisted.concat(remaining);
+    }
 
-        return ast;
+    /**
+     * Analyzes the AST to propagate 'async' status from primitive commands to user functions.
+     */
+    analyzeAsync(ast) {
+        const functions = ast.body.filter(n => n.type === 'FunctionDeclaration');
+        const asyncPrimitives = new Set([
+            'flip', 'waitkey', 'delay', 'input', 'loadimage', 'loadanimimage', 
+            'loadsound', 'loadmusic', 'loadfont', 'readfile', 'writefile', 
+            'openfile', 'readdir', 'nextfile', 'copyfile', 'deletefile'
+        ]);
+
+        const getCalls = (rootNode) => {
+            const calls = new Set();
+            const traverse = (node) => {
+                if (!node || typeof node !== 'object') return;
+                if (Array.isArray(node)) {
+                    for (const item of node) traverse(item);
+                    return;
+                }
+                
+                if (node.type === 'CommandStatement') calls.add(node.command.toLowerCase());
+                if (node.type === 'FunctionCall' || node.type === 'FunctionCallStatement') calls.add(node.name.toLowerCase());
+
+                for (const key in node) {
+                    if (Object.prototype.hasOwnProperty.call(node, key) && key !== 'parent') {
+                        traverse(node[key]);
+                    }
+                }
+            };
+            traverse(rootNode);
+            return calls;
+        };
+
+        const funcMap = new Map();
+        for (const f of functions) {
+            funcMap.set(f.name.toLowerCase(), { node: f, calls: getCalls(f.body) });
+        }
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const data of funcMap.values()) {
+                if (data.node.isAsync) continue;
+
+                for (const call of data.calls) {
+                    if (asyncPrimitives.has(call) || (funcMap.has(call) && funcMap.get(call).node.isAsync)) {
+                        data.node.isAsync = true;
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     statement() {
@@ -114,43 +181,11 @@ export class Parser {
         // 2. Handle Assignments (e.g. x = 10) or Labels (Label:)
         if (this.match('IDENTIFIER')) {
             const name = this.previous().value;
-            let node = { type: 'Variable', name };
+            let node = this.parseAccessChain({ type: 'Variable', name });
 
-            // Handle Type Suffix (e.g. var.Type)
-            this.consumeTypeSuffix();
-
-            // Check for Array Access
-            if (this.check('OPERATOR', '(')) {
-                const symbol = this.symbols.resolve(name);
-                if (symbol && symbol.kind === 'array') {
-                    this.consume('OPERATOR', '(', "Expected '(' after array name");
-                    const indices = [];
-                    do {
-                        indices.push(this.expression());
-                    } while (this.match('OPERATOR', ','));
-                    this.consume('OPERATOR', ')', "Expected ')' after array indices");
-                    node = { type: 'ArrayAccess', name, indices };
-                } else {
-                    // Function Call Statement (e.g. UpdateParticles())
-                    this.consume('OPERATOR', '(', "Expected '(' for function call");
-                    const args = [];
-                    if (!this.check('OPERATOR', ')')) {
-                        do {
-                            args.push(this.expression());
-                        } while (this.match('OPERATOR', ','));
-                    }
-                    this.consume('OPERATOR', ')', "Expected ')' after function arguments");
-                    return { type: 'FunctionCallStatement', name, args };
-                }
-            }
-
-            // Check for Field Access (chain): obj\field
-            while (this.match('OPERATOR', '\\')) {
-                if (this.match('IDENTIFIER')) {
-                    const fieldName = this.previous().value;
-                    this.consumeTypeSuffix(); // Handle field# or field$
-                    node = { type: 'FieldAccess', object: node, field: fieldName };
-                }
+            // Special case: Function call as a standalone statement
+            if (node.type === 'FunctionCall') {
+                return { type: 'FunctionCallStatement', name: node.name, args: node.args };
             }
 
             // Assignment
@@ -242,25 +277,8 @@ export class Parser {
         do {
             if (this.match('IDENTIFIER')) {
                 const name = this.previous().value;
-                let node = { type: 'Variable', name };
-                
-                this.consumeTypeSuffix();
-                
-                if (this.check('OPERATOR', '(')) {
-                     this.consume('OPERATOR', '(', "Expected '('");
-                     const indices = [];
-                     do { indices.push(this.expression()); } while (this.match('OPERATOR', ','));
-                     this.consume('OPERATOR', ')', "Expected ')'");
-                     node = { type: 'ArrayAccess', name, indices };
-                }
-                
-                while (this.match('OPERATOR', '\\')) {
-                    if (this.match('IDENTIFIER')) {
-                        const fieldName = this.previous().value;
-                        this.consumeTypeSuffix();
-                        node = { type: 'FieldAccess', object: node, field: fieldName };
-                    }
-                }
+                // Read only supports variables, arrays or fields, no function calls
+                let node = this.parseAccessChain({ type: 'Variable', name }, false);
                 variables.push(node);
             }
         } while (this.match('OPERATOR', ','));
@@ -364,7 +382,7 @@ export class Parser {
         this.consumeEndFunction();
         
         this.symbols.exitScope();
-        return { type: 'FunctionDeclaration', name, parameters, body, isAsync: true };
+        return { type: 'FunctionDeclaration', name, parameters, body, isAsync: false };
     }
 
     selectStatement() {
@@ -601,46 +619,7 @@ export class Parser {
         }
         if (this.match('IDENTIFIER')) {
             const name = this.previous().value;
-            
-            let node = { type: 'Variable', name };
-
-            // Array Access OR Function Call (if not an array)
-            if (this.check('OPERATOR', '(')) {
-                const symbol = this.symbols.resolve(name);
-                
-                // If it is explicitly known as an array
-                if (symbol && symbol.kind === 'array') {
-                    this.consume('OPERATOR', '(');
-                    const indices = [];
-                    do {
-                        indices.push(this.expression());
-                    } while (this.match('OPERATOR', ','));
-                    this.consume('OPERATOR', ')');
-                    node = { type: 'ArrayAccess', name, indices };
-                } else {
-                    // Treat as Function Call (e.g. Cos(), MyFunc())
-                    this.consume('OPERATOR', '(');
-                    const args = [];
-                    if (!this.check('OPERATOR', ')')) {
-                        do {
-                            args.push(this.expression());
-                        } while (this.match('OPERATOR', ','));
-                    }
-                    this.consume('OPERATOR', ')');
-                    node = { type: 'FunctionCall', name, args };
-                    this.validateCommandArgs({ value: name, line: this.peek().line }, args);
-                }
-            }
-
-            // Field Access
-            while (this.match('OPERATOR', '\\')) {
-                if (this.match('IDENTIFIER')) {
-                    const fieldName = this.previous().value;
-                    this.consumeTypeSuffix();
-                    node = { type: 'FieldAccess', object: node, field: fieldName };
-                }
-            }
-            return node;
+            return this.parseAccessChain({ type: 'Variable', name });
         }
         if (this.match('COMMAND')) {
             const name = this.previous().value;
@@ -695,17 +674,63 @@ export class Parser {
         }
     }
 
-    consumeTypeSuffix() {
-        if (this.check('LABEL')) {
-            this.advance();
-            return true;
+    /**
+     * Helper to parse suffixes, array access, and field chains.
+     * Reduces redundancy between statement() and primary().
+     */
+    parseAccessChain(node, allowFunctions = true) {
+        node.dataType = this.consumeTypeSuffix();
+
+        // Array Access OR Function Call
+        if (this.check('OPERATOR', '(')) {
+            const name = node.name;
+            const symbol = this.symbols.resolve(name);
+            
+            this.consume('OPERATOR', '(');
+            const args = [];
+            if (!this.check('OPERATOR', ')')) {
+                do {
+                    args.push(this.expression());
+                } while (this.match('OPERATOR', ','));
+            }
+            this.consume('OPERATOR', ')');
+
+            if (symbol && symbol.kind === 'array') {
+                node = { type: 'ArrayAccess', name, indices: args, dataType: node.dataType };
+            } else if (allowFunctions) {
+                node = { type: 'FunctionCall', name, args, dataType: node.dataType };
+                this.validateCommandArgs({ value: name, line: this.peek().line }, args);
+            }
         }
+
+        // Field Access (chain): obj\field\subfield
+        while (this.match('OPERATOR', '\\')) {
+            if (this.match('IDENTIFIER')) {
+                const fieldName = this.previous().value;
+                const fieldType = this.consumeTypeSuffix();
+                node = { type: 'FieldAccess', object: node, field: fieldName, dataType: fieldType };
+            }
+        }
+        return node;
+    }
+
+    consumeTypeSuffix() {
+        const token = this.peek();
+        // Blitz suffixes: $ (string), # (float), % (int)
+        if (token.type === 'LABEL') {
+            this.advance();
+            if (token.value === '$') return 'string';
+            if (token.value === '#') return 'float';
+            if (token.value === '%') return 'number';
+            return 'unknown';
+        }
+        // Type suffix: .TypeName
         if (this.check('OPERATOR', '.') && this.peek(1).type === 'IDENTIFIER') {
             this.advance(); // .
             this.advance(); // Identifier
-            return true;
+            return 'object';
         }
-        return false;
+        return null;
     }
 
     consumeEndIf() {

@@ -4,6 +4,8 @@ import { CodeGenerator } from './modules/codegenerator.js';
 import { Preprocessor } from './modules/preprocessor.js';
 
 export class Compiler {
+	static VERSION = "0.4.0";
+	
 	constructor() {
 		this.lexer = new Lexer("");
 		this.parser = new Parser();
@@ -29,6 +31,10 @@ export class Compiler {
 
 		// 3. Parsing
 		const ast = this.parser.parse(this.output);
+
+		// 4. Transformation / Hoisting Pass
+		this.parser.hoist(ast);
+		this.parser.analyzeAsync(ast);
 
 		// Merge Parser Errors (Type checks etc.)
 		if (this.parser.errors && this.parser.errors.length > 0) {

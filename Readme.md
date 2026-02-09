@@ -1,94 +1,76 @@
 # Bonobo Engine
 
-**Modern JavaScript Game Engine with a Retro Soul.**
+### Entwicklungshinweis
+Dieses Projekt kombiniert die Weiterentwicklung des Frameworks **jBB** mit moderner KI-Unterstützung. Während die **Bonobo-Engine** auf dem vom Autor vollständig eigenständig entwickelten jBB-Kern basiert, wird für die hochspezialisierte Logik des Compilers (**ApeShift**) gezielt **Gemini Code Assist** eingesetzt. Der erfahrene Hauptentwickler leitet die Architektur und kontrolliert sämtliche Code-Reviews, während die KI als spezialisierter Assistent für die komplexen Grammatik-Transformationen fungiert.
 
-Bonobo is the spiritual successor to [jBB](https://github.com/Farbfinsternis/jBB). It aims to bring back the fun and simplicity of coding in **BlitzBasic** (Amiga/PC), but built on a robust, modern web architecture.
+---
 
-## Philosophy
+## Bonobo: Die Engine
 
-*   **Retro Feeling:** Write code that feels like 1995. Simple commands like `cls()`, `rect()`, and `load()` let you focus on the game, not the boilerplate.
-*   **Modern Tech:** Under the hood, Bonobo uses ES Modules, Classes, Async/Await, and the Web Audio API.
-*   **Modular:** Only load what you need. The core is slim; features like Tilemaps or Sprites (BOBs) are optional modules.
+### Was ist Bonobo?
+Bonobo ist eine moderne Game Engine für das Web. Sie ist die konsequente Weiterentwicklung des Frameworks **jBB** und verbindet die intuitive Logik klassischer Spieleprogrammierung mit der Leistungsfähigkeit moderner Web-Technologien.
 
-## Features
+### Was kann Bonobo?
+Bonobo bietet eine vollständige Infrastruktur für 2D-Spiele (und experimentell 3D):
+*   Grafik: Abstraktion von HTML5 Canvas 2D und WebGL, inklusive Offscreen-Rendering und automatischem Fullscreen-Support.
+*   Input: Ein hybrides System, das nahtlos zwischen Tastatur, Maus und Gamepad (mit Deadzones) wechselt.
+*   Dateisystem: Ein Virtual File System (VFS), das lokales Speichern und Server-Assets transparent verwaltet.
+*   Audio: Eine saubere Integration der Web Audio API für Soundeffekte und Musik.
+*   Mathematik: Ein deterministischer Zufallszahlengenerator (PRNG) und Blitz-kompatible Mathe-Utilitys.
 
-*   **Core Architecture:**
-    *   Modular plugin system.
-    *   **Virtual File System (VFS):** Supports overlaying local storage data over server files (great for mods/configs).
-    *   **Asset Manager:** Automatic tracking of loading progress for loading screens.
-    *   **Error Handling:** Centralized logging system.
+### Wie funktioniert Bonobo?
+Bonobo basiert auf einer strikt modularen Struktur unter Verwendung von modernen ES-Modulen und Klassen. Das Herzstück ist ein leistungsfähiges Rendering-System, das die Komplexität der Browser-APIs hinter einfachen Befehlen verbirgt. Durch die Nutzung von Async/Await für das Asset-Loading wird ein flüssiger Programmablauf ohne blockierende Ladezeiten garantiert.
 
-*   **Graphics:**
-    *   HTML5 Canvas 2D abstraction.
-    *   Fullscreen support via simple wildcard (`*`).
-    *   **BOBs (Blitter Objects):** Advanced sprites with animation support and auto-centering (`midHandle`).
-    *   **Tilemaps:** Support for Tiled JSON maps with viewport culling.
-    *   Primitives (Rects, Lines, Colors).
+### Warum gibt es Bonobo?
+Bonobo ist eine Hommage an die Ära von **BlitzBasic**. Diese Sprache hat unzählige Kinder und Jugendliche an das Programmieren herangeführt, weil ihre Einfachheit bestechend war: Ein paar Zeilen Code genügten, um etwas auf den Bildschirm zu zaubern. Bonobo bringt dieses Gefühl zurück in die moderne Zeit und eliminiert den unnötigen "Boilerplate"-Code heutiger Frameworks.
 
-*   **Input:**
-    *   **Hybrid Input:** Seamlessly switch between Mouse, Keyboard, and Gamepad on the fly.
-    *   **Keyboard:** With `keyDown` (continuous) and `keyHit` (one-shot) support.
-    *   **Mouse:** Position tracking and button states.
-    *   **Gamepad (Joy):** Full Gamepad API support with deadzones.
+### Für wen ist Bonobo?
+Bonobo richtet sich an Entwickler, die eine schlanke Engine für schnelle Prototypen oder Retro-Projekte suchen, sowie an Programmierer, die die volle Kontrolle über ihren Code behalten wollen, ohne sich mit den Details der Browser-APIs auseinanderzusetzen.
 
-*   **Audio:**
-    *   Web Audio API wrapper for sound effects.
+---
 
-*   **Utils:**
-    *   Math helper (BlitzBasic style `Rand`, `Int`, `Float`).
-    *   Collision detection (AABB & Pixel-Perfect).
+## ApeShift: Der Compiler
 
-## 🛠️ Getting Started
+### Was macht ApeShift?
+ApeShift ist ein spezialisierter Compiler, der Quellcode in BlitzBasic-Syntax (Blitz2D) analysiert und in hochperformantes JavaScript für die Bonobo-Engine übersetzt. Er dient als Brücke zwischen der klassischen BASIC-Welt und dem modernen Web.
 
-Check out the `examples/simple/game.js` to see Bonobo in action.
+### Was kann ApeShift?
+Der Compiler nutzt eine fortschrittliche Multi-Pass-Architektur:
+1.  Lexing & Parsing: Erzeugung eines präzisen Abstract Syntax Trees (AST).
+2.  Hoisting: Automatisches Verschieben von Typen, Funktionen und Daten an den Programmanfang.
+3.  Async-Transformation: Automatisierte Erkennung und Propagation des `async/await`-Status durch den gesamten Aufrufbaum (Lösung des "Function Color"-Problems).
+4.  Type-Inference: Ein robustes System zur Erkennung von Datentypen basierend auf Suffixen und Command-Metadaten.
+5.  RTL-Integration: Eine dedizierte Runtime Library (`blitz.runtime.js`) emuliert das Verhalten von BlitzBasic (Handles, Global State, Type-Collections) auf der Bonobo-Engine.
 
-### The "BlitzBasic" Style
-Bonobo allows you to write code in a procedural style within a game loop, avoiding complex class structures in your game logic if you prefer.
+### Für wen ist ApeShift?
+ApeShift ist für alle, die ihre alten BlitzBasic-Projekte im Browser wiederbeleben wollen oder die die unschlagbar einfache Syntax von BASIC lieben, aber die Reichweite moderner Web-Browser nutzen möchten.
 
-```javascript
-function loop(){
-    gfx.cls();
-    
-    if(keys.keyDown("KEY_RIGHT")) ship.x += 5;
-    
-    bob.draw(ship.image, ship.x, ship.y);
-}
-```
+---
 
-## Introducing ApeShift (Experimental)
-ApeShift is an experimental compiler designed to translate Blitz2D syntax into modern JavaScript for the Bonobo Engine. It includes a fully redesigned Web IDE and significant enhancements to the language support.
+## Die Zukunft: Roadmap zu 100% Kompatibilität
 
-### Features
-* ApeShift Compiler:
-Control Flow: Support for Select...Case and Exit (loop break).
-Data Management: Data, Read, and Restore commands for embedding assets/level data.
-Variables: Support for Const and Dim (Arrays), along with improved global/local scope handling.
-Preprocessor: Recursive Include support to modularize code.
-Syntax: Improved parsing for type suffixes (obj.Type) and function calls.
+Unser erklärtes Ziel ist die **100%ige Kompatibilität zu Blitz2D**. 
 
-* Engine Integration:
-Input Mapping: Automatic translation of legacy Blitz2D keycodes and mouse buttons to modern JS events.
-Smart Mapping: Intelligent argument conversion for graphics commands.
-Auto-Init: Automatic registration of core modules (Keys, Mouse) in the generated code.
+**Aktueller Status:**
+*   **ApeShift (Syntax & Logik): ~90%** (Kern-Sprachfeatures, Types, Arrays, Async-Handling sind stabil).
+*   **Bonobo (Befehlssatz & API): ~80%** (Grafik, Sound und Input decken die meisten Spiele ab).
 
-### Blitz2D Compatibility Status
-ApeShift offers **near-complete syntax support** for the BlitzBasic language, while the command set (API) is focused on core 2D gameplay.
+**Nächste Schritte:**
 
-*   **Language Syntax (~95%):** Full control flow, complex nesting, Types (auto-lists), Arrays (Dim), Data/Read/Restore, and Type Suffixes.
-*   **Command Set (~65%):** 2D primitives, Image handling (including Offscreen-Buffers), Input (Keyboard/Mouse/Joy), and Math/Strings are well supported.
-*   **In Progress:** Binary file I/O (`ReadInt`, `WriteInt`), Bank system (`CreateBank`), and pixel-perfect collision.
-*   **Limitations:** Legacy system commands (e.g., `SystemProperty`) and low-level hardware graphics mode queries are limited or require polyfills in the browser context.
+*   Sprach-Features: Implementierung einer State-Machine-Transformation für `Goto` und `Gosub`, um Sprünge innerhalb von Funktionen zu ermöglichen.
+*   Speicher-Management: Vollständige Unterstützung des `Bank`-Systems und binärer Datei-Operationen (`ReadInt`, `WriteInt` etc.) via `DataView`.
+*   Grafik-Härtung: Implementierung von Pixel-Manipulation (`ReadPixel`/`WritePixel`) und pixelgenauer Kollisionsabfrage.
+*   Type-Collections: Vollständige Emulation der verketteten Listen von Blitz-Types (`First`, `Last`, `After`, `Before`, `Insert`).
 
-To try the compiler, open cpl/index.html in your browser.
+---
 
-## 📂 Structure
+## Struktur
 
-*   `/lib`: The core engine code (`bonobo.js`, `utils.js`).
-*   `/modules`: Feature modules.
-    *   `/bonobo`: The standard toolbelt (Graphics, Input, Sound).
-    *   `/bobs`: Sprite handling.
-    *   `/tilemap`: Tiled map loader.
-    *   `/assets`: Asset management.
-*   `/cpl`: The ApeShift Compiler and Web IDE.
-*   `/examples`: Sample projects.
+*   /lib: Der Kern der Bonobo Engine.
+*   /modules/bonobo: Die Standard-Module (Grafik, Input, Sound, Bank, FileStream).
+*   /cpl: Der ApeShift Compiler inklusive Web-IDE.
+*   /cpl/modules/blitz.runtime.js: Die Kompatibilitätsschicht (RTL).
+*   /examples: Beispielprojekte für native Bonobo-Entwicklung und ApeShift-Kompilate.
+
+Den interaktiven Playground findest du unter: **https://farbfinsternis.tv/bonobo/cpl/**
 ```

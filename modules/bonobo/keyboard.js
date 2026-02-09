@@ -39,7 +39,6 @@ export class Keyboard{
      */
     constructor(bonobo){
         this.bonobo = bonobo;
-        this.bonobo.register(this);
         this.keys = {};
         this.hitKeys = {};
         this.modifiers = {};

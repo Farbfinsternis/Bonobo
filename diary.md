@@ -1,87 +1,16 @@
-# Entwicklertagebuch
+## Session: Hardening & Core Feature Completion
 
-## Session: Compiler & Engine Integration
+### Compiler (ApeShift)
+- **Stability Fixes:** Korrektur eines Absturzes in der `analyzeAsync`-Phase. Funktionen werden nun initial als synchron markiert und erst bei Bedarf "infiziert".
+- **Type Inference:** Das Typ-System nutzt nun aktiv die Metadaten der `command_map.js` (`returnType`), was die Präzision bei der Code-Generierung massiv erhöht.
+- **Variable Collisions:** `cleanName` wurde gehärtet. Variablen mit unterschiedlichen Suffixen (z.B. `score%` und `score$`) werden nun zu eindeutigen JS-Namen (`score_i`, `score_s`) aufgelöst, um Kollisionen zu vermeiden.
+- **Comment Preservation:** Kommentare aus dem Blitz-Quellcode werden nun zuverlässig in den AST übernommen und im generierten JavaScript an der richtigen Stelle ausgegeben.
 
-### Infrastruktur
-- **Preprocessor:** `Preprocessor`-Klasse für rekursive `Include`-Befehle implementiert.
-- **Async Compilation:** `Compiler` auf asynchrone Verarbeitung umgestellt (für Datei-Laden).
-- **UI:** `index.html` auf Split-View umgebaut (Source | JS | Preview).
+### Engine & RTL (Bonobo)
+- **Strict Separation:** Die `BlitzRuntime` (RTL) ist nun vollständig vom Bonobo-Kern entkoppelt. Module werden explizit übergeben, anstatt die Engine-Instanz zu manipulieren.
+- **Binary & Memory:** Das `Bank`-Modul wurde vervollständigt (jetzt mit `Int16` Support für Shorts). `FileStream` unterstützt nun auch `ReadShort`, `WriteShort` sowie `readLine`/`writeLine`.
+- **Deterministic Math:** Die `math.js` verfügt nun über einen LCG-basierten Zufallsgenerator. `SeedRnd` ermöglicht nun exakt reproduzierbare Spielabläufe.
+- **Collision Fixes:** Parameter-Mappings für `ImageRectCollide` in der `command_map.js` korrigiert.
 
-### Parser & Code Generator
-- **Kontrollfluss:** Unterstützung für `Select ... Case` und `Exit` (Schleifenabbruch) hinzugefügt.
-- **Daten:** `Data`, `Read` und `Restore` Befehle implementiert.
-- **Variablen:** `Const` und `Dim` (Arrays) hinzugefügt. Global/Local Scope-Logik verbessert.
-- **Syntax:** Parsing von Typ-Suffixen (`obj.Type`) und Funktionsaufrufen vs. Array-Zugriff korrigiert.
-- **Literale:** Unterstützung für `True`, `False`, `Pi`.
-
-### Engine Integration (Bonobo)
-- **Input Mapping:** `keycodes.js` erstellt, um Blitz2D Key/Mouse-Codes auf JS-Events zu mappen.
-- **Grafik:** Argument-Mapping für `Rect`/`Oval` (Int zu Bool) und `Text`-Parameter korrigiert.
-- **Initialisierung:** Automatische Registrierung von Input-Modulen und Übergabe der Canvas-Größe.
-- **UI:** Redesign der `index.html` (Dark Theme, VS Code Style).
-- **Rebranding:** Umbenennung des Projekts in "ApeShift".
-- **Logo:** Erstellung eines SVG-Logos (freundlicher Bonobo) und Integration in die UI.
-- **Logo Update:** Redesign auf einfarbiges, geometrisches Orange-Logo (Harte Kanten).
-- **Branding:** Anpassung des Schriftzugs "ApeShift" (Ape normal, Shift fett, kein Leerzeichen).
-
-### Compiler Refactoring & Runtime Library
-- **Command Map:** `commands.js` entfernt. Der Lexer lädt gültige Befehle nun dynamisch aus der `command_map.js`.
-- **Mapping Updates:** Umfangreiche Ergänzung der `command_map.js` um fehlende Blitz2D-Befehle (Grafik, Sound, Input, File, Math, String).
-- **Kompatibilitäts-Check:** Abgleich aller Module mit Blitz2D-Signaturen. Inkompatibilitäten und fehlende Methoden wurden als TODOs markiert.
-
-### Strategie & Roadmap
-- **Roadmap:** Erstellung einer `todo.md` für die 100%ige Blitz2D-Kompatibilität.
-- **Strategie:** Festlegung auf "Compiler-First" Ansatz. Bonobo bleibt modern, Kompatibilität wird durch eine Runtime Library (RTL) erzeugt.
-- **Runtime Library:** Initiale Erstellung der `blitz.runtime.js` (`cpl/modules/blitz.runtime.js`) als Zwischenschicht für Handle-Management und State-Kapselung.
-- **RTL Completion:** Vollständige Implementierung der Wrapper-Methoden in `blitz.runtime.js` für alle Kern-Module. Umstellung der `command_map.js` auf RTL-Ziele.
-- **Playground Issue:** Identifizierung eines Problems mit dem Fokusverlust im Editor durch sofortige Neu-Kompilierung bei Tastendruck. Planung eines "Run"-Buttons.
-
-## Session: Stabilität, Error-Handling & Projekt-Portabilität
-
-### Compiler & Parser Härtung
-- **Error Handling:** Implementierung eines strukturierten Error-Reportings mit `line` und `column`. Der Parser nutzt nun einen Synchronisations-Mechanismus, um nach Fehlern stabil weiterzuarbeiten.
-- **Verschachtelung:** Massive Härtung der Block-Parsing-Logik (`block()`). Einführung von "Panic Breaks", die verhindern, dass Terminatorsymbole äußerer Scopes (`Next`, `Wend`) bei Syntaxfehlern in inneren Blöcken verschluckt werden.
-- **Keywords:** Unterstützung für getrennte Schreibweisen (`End If`, `Else If`, `End Function`) und konsequente Case-Insensitivity über alle Keyword-Prüfungen hinweg.
-- **Typ-System:** Erweiterung der Typ-Inferenz. Der Parser erkennt nun Rückgabetypen von Funktionen anhand von Suffixen (`#`, `%`, `$`) und Symboltabellen-Einträgen.
-- **Portabilität:** Einführung von `importRoot` im `CodeGenerator`, um den generierten Code unabhängig von der physischen Ordnerstruktur des Playgrounds zu machen.
-
-### Runtime Library (RTL) & Engine
-- **Buffer Management:** Implementierung von `SetBuffer`, `BackBuffer` und `ImageBuffer`. Bilder können nun als vollwertige Zeichenziele (Offscreen-Canvas) genutzt werden.
-- **Performance:** Optimierung des `Flip()`-Verhaltens. Durch Entfernen des künstlichen `requestAnimationFrame` innerhalb der RTL wurde der "Double-VSync" behoben, was zu flüssigen 60 FPS führt.
-- **Async-Loop:** Anpassung der `Bonobo.gameLoop`, um auf asynchrone Benutzer-Loops zu warten. Dies ermöglicht die Nutzung von blockierenden Befehlen wie `Delay` oder `WaitKey`.
-- **Strict Separation:** Vollständige Entfernung von Playground-spezifischen Leaks (wie `postMessage`) aus der RTL. Die Runtime ist nun 100% UI-agnostisch.
-- **Math & Grafik:** Ergänzung fehlender Standardbefehle wie `Max`, `Min` und zentrierte Textausgabe.
-
-### Playground UI & UX
-- **Redesign:** Umstellung auf ein modernes Side-by-Side Layout (Source | JS | Preview) mit Blueprint-Hintergrund für das Canvas.
-- **Konsole:** Integration einer dedizierten Fehler-Konsole, die Compiler-Probleme präzise lokalisiert und darstellt.
-- **ZIP-Support:** Implementierung eines Projekt-Imports via JSZip. Assets werden automatisch in Blob-URLs umgewandelt und über eine `ASSET_MAP` in das Iframe injiziert.
-- **Branding:** Integration der ikonischen Blitz-Rakete im RUN-Button und als visueller Hinweis im leeren Preview-Bereich.
-- **Robustheit:** Automatisches Bereinigen von HTML-Entities (`&lt;`, `&gt;`) beim Kompilieren, um Copy-Paste-Fehler aus Web-Quellen zu minimieren.
-
-### Status Quo
-- Der Compiler ist nun in der Lage, komplexe, verschachtelte Blitz2D-Strukturen (Entity-Systeme, Scrolling-Engines) stabil in performanten JavaScript-Code zu übersetzen.
-- Die Trennung zwischen Engine (Bonobo), Compiler (ApeShift) und UI (Playground) ist architektonisch sauber abgeschlossen.
-
-## Masterplan: Roadmap to 100% Blitz2D Compatibility
-
-### Phase 1: Binary Data & Memory (High Priority)
-- [ ] **Binary I/O:** Implement `ReadInt`, `WriteInt`, `ReadFloat`, `WriteFloat` using `DataView`.
-- [ ] **Bank System:** Full implementation of `CreateBank`, `Peek`, `Poke`, and `CopyBank`.
-
-### Phase 2: Advanced Graphics & Collision
-- [ ] **Pixel Access:** Implement `ReadPixel`, `WritePixel` and `LockBuffer` logic.
-- [ ] **Pixel-Perfect Collision:** Upgrade `ImagesCollide` to use pixel-data checks.
-- [ ] **Image Handling:** Add `MaskImage` (Color Keying) and `GrabImage` refinements.
-
-### Phase 3: System & Determinism
-- [ ] **SeedRnd:** Implement a seedable PRNG for deterministic game logic.
-- [ ] **Timers:** Emulate `CreateTimer` and `WaitTimer` for legacy frame-pacing.
-
-### Phase 4: Language & Tooling
-- [ ] **Goto/Gosub:** Research state-machine transformation for label jumping.
-- [ ] **Bundling:** Create a one-click export for standalone web builds.
-
-### Phase 5: Extensibility & Dynamic Modules
-- [ ] **Dynamic Module Loading:** Implement a system to register external Bonobo modules at runtime.
-- [ ] **Compiler Awareness:** Develop a mechanism for the compiler to discover and map commands from dynamically loaded modules (e.g., via a metadata/manifest file or reflection).
+### Status
+Der Compiler ist nun "abgehärtet". Die Kern-Logik (Typen, Listen, Binär-Daten, Async) ist stabil. Nächster großer Meilenstein ist die Transformation von `Goto`/`Gosub` in eine State-Machine.

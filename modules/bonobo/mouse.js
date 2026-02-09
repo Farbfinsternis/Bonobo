@@ -19,7 +19,6 @@ export class Mouse{
      */
     constructor(bonobo){
         this.bonobo = bonobo;
-        this.bonobo.register(this);
         this.x = 0;
         this.y = 0;
         this.isLocked = false;

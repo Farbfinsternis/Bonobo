@@ -8,7 +8,6 @@ export class Joy{
 
     constructor(bonobo){
         this.bonobo = bonobo;
-        this.bonobo.register(this);
 
         window.addEventListener("gamepadconnected", (e) => {
             this.bonobo.utils.error.log(`Bonobo Gamepad: Connected at index ${e.gamepad.index}: ${e.gamepad.id}.`);

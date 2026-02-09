@@ -11,6 +11,7 @@ import { Joy } from "./joy.js";
 import { Maths } from "./math.js";
 import { Time } from "./time.js";
 import { Strings } from "./string.js";
+import { Bank } from "./bank.js";
 
 /**
  * Helper function to initialize all core modules at once.
@@ -34,7 +35,8 @@ export const init = (bonobo, width = 640, height = 480) => {
         math: new Maths(bonobo),
         time: new Time(bonobo),
         str: new Strings(bonobo),
+        bank: Bank, // Wir exportieren die Klasse selbst für Instanziierungen
     };
 }
 
-export { Graphics, Draw, Image, Keyboard, Mouse, Sound, Font, Files, Collision, Joy, Maths, Time, Strings };
+export { Graphics, Draw, Image, Keyboard, Mouse, Sound, Font, Files, Collision, Joy, Maths, Time, Strings, Bank };

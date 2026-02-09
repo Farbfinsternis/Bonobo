@@ -116,11 +116,14 @@ export class Lexer {
 
             // 3. Handle Comments (; to end of line)
             if (char === ';') {
+                const startCol = this.col;
+                const startLine = this.line;
+                this.advance(); // consume ;
                 let value = '';
                 while (this.peek() !== null && this.peek() !== '\n') {
                     value += this.advance();
                 }
-                // Optional: Emit comment token or ignore. Here we ignore/skip.
+                tokens.push({ type: 'COMMENT', value: value.trim(), line: startLine, col: startCol });
                 continue;
             }
 

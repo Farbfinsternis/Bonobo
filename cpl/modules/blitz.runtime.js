@@ -4,9 +4,13 @@
  * Acts as the compatibility layer between compiled BlitzBasic code and the Bonobo engine.
  * Manages handles (Int -> Object), global state, and behavior emulation.
  */
+import { FileStream } from "../../modules/bonobo/file-stream.js";
+import { Bank } from "../../modules/bonobo/bank.js";
+
 export class BlitzRuntime {
-    constructor(bonobo) {
+    constructor(bonobo, modules) {
         this.bonobo = bonobo;
+        this.modules = modules;
 
         // --- Handle Maps ---
         // BlitzBasic uses Integers to reference resources. We map these IDs to the actual JS objects.
@@ -15,6 +19,7 @@ export class BlitzRuntime {
         this.music = new Map();
         this.fonts = new Map();
         this.files = new Map();
+        this.banks = new Map();
 
         // --- ID Counters ---
         this.nextImageId = 1;
@@ -22,16 +27,25 @@ export class BlitzRuntime {
         this.nextMusicId = 1;
         this.nextFontId = 1;
         this.nextFileId = 1;
+        this.nextBankId = 1;
 
         // --- Data & Types ---
         this.dataStore = [];
         this.dataPtr = 0;
         this.dataLabels = new Map();
-        this.typeLists = new Map();
 
         // --- Global State ---
         // BlitzBasic keeps state globally (e.g. current drawing color).
         // Bonobo does this too, but the RTL ensures we can intercept/modify if needed.
+    }
+
+    /**
+     * Updates all input modules. Called by the compiler at the end of the loop.
+     */
+    update() {
+        this.modules.keys?.update();
+        this.modules.mouse?.update();
+        this.modules.joy?.update();
     }
 
     /**
@@ -54,44 +68,45 @@ export class BlitzRuntime {
         // For now, we assume the resolution set in init is correct.
 
         // Hard Reset of Canvas Context to remove any previous transforms (Origin, Scale, etc.)
-        if (this.bonobo.gfx) {
+        const gfx = this.modules.gfx;
+        if (gfx) {
             // Update internal engine resolution state to match the new canvas size
-            if (this.bonobo.gfx.canvas) {
-                this.bonobo.gfx.canvas.width = width;
-                this.bonobo.gfx.canvas.height = height;
+            if (gfx.canvas) {
+                gfx.canvas.width = width;
+                gfx.canvas.height = height;
             }
-            if (this.bonobo.gfx.canvasContext) {
-                this.bonobo.gfx.canvasContext.setTransform(1, 0, 0, 1, 0, 0);
-                this.bonobo.gfx.canvasContext.textBaseline = 'top';
-                this.bonobo.gfx.canvasContext.textAlign = 'left';
+            if (gfx.canvasContext) {
+                gfx.canvasContext.setTransform(1, 0, 0, 1, 0, 0);
+                gfx.canvasContext.textBaseline = 'top';
+                gfx.canvasContext.textAlign = 'left';
             }
         }
 
-        this.bonobo.draw.origin(0, 0);
-        this.bonobo.draw.viewport(0, 0, width, height);
-        this.bonobo.draw.clsColor(0, 0, 0, 1.0);
+        this.modules.draw.origin(0, 0);
+        this.modules.draw.viewport(0, 0, width, height);
+        this.modules.draw.clsColor(0, 0, 0, 1.0);
         this.cls();
-        this.bonobo.draw.color(255, 255, 255, 1.0);
+        this.modules.draw.color(255, 255, 255, 1.0);
     }
 
     graphicsWidth() {
-        return this.bonobo.gfx.width;
+        return this.modules.gfx.width;
     }
 
     graphicsHeight() {
-        return this.bonobo.gfx.height;
+        return this.modules.gfx.height;
     }
 
     color(r, g, b, a = 1.0) {
-        this.bonobo.draw.color(Number(r), Number(g), Number(b), Number(a));
+        this.modules.draw.color(Number(r), Number(g), Number(b), Number(a));
     }
 
     clsColor(r, g, b, a = 1.0) {
-        this.bonobo.draw.clsColor(Number(r), Number(g), Number(b), Number(a));
+        this.modules.draw.clsColor(Number(r), Number(g), Number(b), Number(a));
     }
 
     cls() {
-        this.bonobo.draw.cls();
+        this.modules.draw.cls();
     }
 
     async flip() {
@@ -107,20 +122,20 @@ export class BlitzRuntime {
         // console.log(`Rect: ${x}, ${y}, ${w}, ${h}, ${solid}`);
         // Ensure solid is treated correctly even if passed as string '0' or '1'
         const isSolid = (solid === 1 || solid === '1' || solid === true || solid === 'true');
-        this.bonobo.draw.rect(Number(x), Number(y), Number(w), Number(h), isSolid);
+        this.modules.draw.rect(Number(x), Number(y), Number(w), Number(h), isSolid);
     }
 
     oval(x, y, w, h, solid = 1) {
         const isSolid = (solid === 1 || solid === '1' || solid === true || solid === 'true');
-        this.bonobo.draw.oval(Number(x), Number(y), Number(w), Number(h), isSolid);
+        this.modules.draw.oval(Number(x), Number(y), Number(w), Number(h), isSolid);
     }
 
     line(x1, y1, x2, y2) {
-        this.bonobo.draw.line(Number(x1), Number(y1), Number(x2), Number(y2));
+        this.modules.draw.line(Number(x1), Number(y1), Number(x2), Number(y2));
     }
 
     plot(x, y) {
-        this.bonobo.draw.plot(Number(x), Number(y));
+        this.modules.draw.plot(Number(x), Number(y));
     }
 
     text(x, y, txt, cx = 0, cy = 0) {
@@ -132,7 +147,7 @@ export class BlitzRuntime {
             ctx.textAlign = (cx === 1 || cx === '1' || cx === true) ? 'center' : 'left';
             ctx.textBaseline = (cy === 1 || cy === '1' || cy === true) ? 'middle' : 'top';
             
-            this.bonobo.draw.text(String(txt), Number(x), Number(y));
+            this.modules.draw.text(String(txt), Number(x), Number(y));
             
             ctx.textAlign = oldAlign;
             ctx.textBaseline = oldBaseline;
@@ -140,19 +155,19 @@ export class BlitzRuntime {
     }
 
     origin(x, y) {
-        this.bonobo.draw.origin(x, y);
+        this.modules.draw.origin(x, y);
     }
 
     viewport(x, y, w, h) {
-        this.bonobo.draw.viewport(x, y, w, h);
+        this.modules.draw.viewport(x, y, w, h);
     }
 
     setAlpha(alpha) {
-        this.bonobo.draw.setAlpha(alpha);
+        this.modules.draw.setAlpha(alpha);
     }
 
     getAlpha() {
-        return this.bonobo.draw.getAlpha();
+        return this.modules.draw.getAlpha();
     }
 
     // ==========================================
@@ -160,14 +175,14 @@ export class BlitzRuntime {
     // ==========================================
 
     loadImage(path) {
-        const img = this.bonobo.img.load(this._resolvePath(path));
+        const img = this.modules.img.load(this._resolvePath(path));
         const id = this.nextImageId++;
         this.images.set(id, img);
         return id;
     }
 
     loadAnimImage(path, w, h, first, count) {
-        const img = this.bonobo.img.load(this._resolvePath(path), w, h, count);
+        const img = this.modules.img.load(this._resolvePath(path), w, h, count);
         // TODO: Handle 'first' frame offset if Bonobo supports it
         const id = this.nextImageId++;
         this.images.set(id, img);
@@ -177,7 +192,7 @@ export class BlitzRuntime {
     drawImage(handle, x, y, frame = 0) {
         const img = this.images.get(handle);
         if (img) {
-            this.bonobo.img.draw(img, x, y, frame);
+            this.modules.img.draw(img, x, y, frame);
         }
     }
 
@@ -189,32 +204,32 @@ export class BlitzRuntime {
     tileImage(handle, x = 0, y = 0, frame = 0) {
         const img = this.images.get(handle);
         if (img) {
-            this.bonobo.img.tileImage(img, x, y, frame);
+            this.modules.img.tileImage(img, x, y, frame);
         }
     }
 
     midHandle(handle) {
         const img = this.images.get(handle);
         if (img) {
-            this.bonobo.img.midHandle(img);
+            this.modules.img.midHandle(img);
         }
     }
 
     autoMidHandle(enable) {
-        this.bonobo.img.autoMidHandle(enable !== 0);
+        this.modules.img.autoMidHandle(enable !== 0);
     }
 
     scaleImage(handle, xScale, yScale) {
         const img = this.images.get(handle);
         if (img) {
-            this.bonobo.img.scaleImage(img, xScale, yScale);
+            this.modules.img.scaleImage(img, xScale, yScale);
         }
     }
 
     rotateImage(handle, angle) {
         const img = this.images.get(handle);
         if (img) {
-            this.bonobo.img.rotateImage(img, angle);
+            this.modules.img.rotateImage(img, angle);
         }
     }
 
@@ -224,15 +239,15 @@ export class BlitzRuntime {
     }
 
     backBuffer() {
-        return this.bonobo.gfx.canvas;
+        return this.modules.gfx.canvas;
     }
 
     setBuffer(canvas) {
         if (!canvas) return;
 
         // If we are switching back to the main screen, restore the Graphics instance as owner
-        if (this.bonobo.gfx && canvas === this.bonobo.gfx.canvas) {
-            this.bonobo.contextOwner = this.bonobo.gfx;
+        if (this.modules.gfx && canvas === this.modules.gfx.canvas) {
+            this.bonobo.contextOwner = this.modules.gfx;
             return;
         }
 
@@ -258,7 +273,7 @@ export class BlitzRuntime {
     }
 
     createImage(w, h, frames = 1) {
-        const img = this.bonobo.img.createImage(w, h);
+        const img = this.modules.img.createImage(w, h);
         const id = this.nextImageId++;
         this.images.set(id, img);
         return id;
@@ -267,7 +282,7 @@ export class BlitzRuntime {
     grabImage(handle, x, y) {
         const img = this.images.get(handle);
         if (img) {
-            this.bonobo.img.grabImage(img, x, y);
+            this.modules.img.grabImage(img, x, y);
         }
     }
 
@@ -318,7 +333,7 @@ export class BlitzRuntime {
                 const val = input.value;
                 document.body.removeChild(overlay);
                 // Draw input to screen to simulate console behavior
-                this.text(this.bonobo.draw.lastX || 0, this.bonobo.draw.lastY || 0, (promptStr || "") + val);
+                this.text(this.modules.draw.lastX || 0, this.modules.draw.lastY || 0, (promptStr || "") + val);
                 resolve(val);
             };
 
@@ -331,51 +346,51 @@ export class BlitzRuntime {
     }
 
     keyDown(key) {
-        return this.bonobo.keys.keyDown(key) ? 1 : 0;
+        return this.modules.keys.keyDown(key) ? 1 : 0;
     }
 
     keyHit(key) {
-        return this.bonobo.keys.keyHit(key) ? 1 : 0;
+        return this.modules.keys.keyHit(key) ? 1 : 0;
     }
 
     mouseDown(button) {
-        return this.bonobo.mouse.down(button) ? 1 : 0;
+        return this.modules.mouse.down(button) ? 1 : 0;
     }
 
     mouseHit(button) {
-        return this.bonobo.mouse.hit(button) ? 1 : 0;
+        return this.modules.mouse.hit(button) ? 1 : 0;
     }
 
-    mouseX() { return this.bonobo.mouse.x; }
-    mouseY() { return this.bonobo.mouse.y; }
-    mouseZ() { return this.bonobo.mouse.z; }
+    mouseX() { return this.modules.mouse.x; }
+    mouseY() { return this.modules.mouse.y; }
+    mouseZ() { return this.modules.mouse.z; }
 
-    flushKeys() { this.bonobo.keys.flushKeys(); }
-    flushMouse() { this.bonobo.mouse.flushMouse(); }
+    flushKeys() { this.modules.keys.flushKeys(); }
+    flushMouse() { this.modules.mouse.flushMouse(); }
 
-    hidePointer() { this.bonobo.mouse.hidePointer(); }
-    showPointer() { this.bonobo.mouse.showPointer(); }
+    hidePointer() { this.modules.mouse.hidePointer(); }
+    showPointer() { this.modules.mouse.showPointer(); }
     
-    mouseXSpeed() { return this.bonobo.mouse.xSpeed; }
-    mouseYSpeed() { return this.bonobo.mouse.ySpeed; }
-    mouseZSpeed() { return this.bonobo.mouse.zSpeed; }
+    mouseXSpeed() { return this.modules.mouse.xSpeed; }
+    mouseYSpeed() { return this.modules.mouse.ySpeed; }
+    mouseZSpeed() { return this.modules.mouse.zSpeed; }
 
-    waitKey() { return this.bonobo.keys.waitKey(); }
-    getKey() { return this.bonobo.keys.getKey(); }
+    waitKey() { return this.modules.keys.waitKey(); }
+    getKey() { return this.modules.keys.getKey(); }
 
-    joyType(port = 0) { return this.bonobo.joy.joyType(port); }
-    joyDown(btn, port = 0) { return this.bonobo.joy.joyDown(btn, port); }
-    joyHit(btn, port = 0) { return this.bonobo.joy.joyHit(btn, port); }
-    joyX(port = 0) { return this.bonobo.joy.joyX(port); }
-    joyY(port = 0) { return this.bonobo.joy.joyY(port); }
-    joyZ(port = 0) { return this.bonobo.joy.joyAxis(2, port); }
+    joyType(port = 0) { return this.modules.joy.joyType(port); }
+    joyDown(btn, port = 0) { return this.modules.joy.joyDown(btn, port); }
+    joyHit(btn, port = 0) { return this.modules.joy.joyHit(btn, port); }
+    joyX(port = 0) { return this.modules.joy.joyX(port); }
+    joyY(port = 0) { return this.modules.joy.joyY(port); }
+    joyZ(port = 0) { return this.modules.joy.joyAxis(2, port); }
 
     // ==========================================
     // SOUND & MUSIC
     // ==========================================
 
     loadSound(path) {
-        const snd = this.bonobo.sound.load(this._resolvePath(path));
+        const snd = this.modules.sound.load(this._resolvePath(path));
         const id = this.nextSoundId++;
         this.sounds.set(id, snd);
         return id;
@@ -384,13 +399,13 @@ export class BlitzRuntime {
     playSound(handle) {
         const snd = this.sounds.get(handle);
         if (snd) {
-            return this.bonobo.sound.play(snd);
+            return this.modules.sound.play(snd);
         }
         return null;
     }
 
     loadMusic(path) {
-        const mus = this.bonobo.sound.loadMusic(this._resolvePath(path));
+        const mus = this.modules.sound.loadMusic(this._resolvePath(path));
         const id = this.nextMusicId++;
         this.music.set(id, mus);
         return id;
@@ -399,121 +414,176 @@ export class BlitzRuntime {
     playMusic(handle) {
         const mus = this.music.get(handle);
         if (mus) {
-            return this.bonobo.sound.playMusic(mus);
+            return this.modules.sound.playMusic(mus);
         }
         return null;
     }
 
     stopChannel(channel) {
-        this.bonobo.sound.stopChannel(channel);
+        this.modules.sound.stopChannel(channel);
     }
 
     channelPitch(channel, pitch) {
-        this.bonobo.sound.channelPitch(channel, pitch);
+        this.modules.sound.channelPitch(channel, pitch);
     }
 
     channelVolume(channel, volume) {
-        this.bonobo.sound.channelVolume(channel, volume);
+        this.modules.sound.channelVolume(channel, volume);
     }
 
     channelPan(channel, pan) {
-        this.bonobo.sound.channelPan(channel, pan);
+        this.modules.sound.channelPan(channel, pan);
     }
 
     // ==========================================
     // FILES
     // ==========================================
 
-    openFile(path) { return this.bonobo.files.openFile(this._resolvePath(path)); }
-    readFile(handle) { return this.bonobo.files.readFile(handle); }
-    writeFile(handle, txt) { return this.bonobo.files.writeFile(handle, txt); }
-    closeFile(handle) { this.bonobo.files.closeFile(handle); }
-    filePos(handle) { return this.bonobo.files.filePos(handle); }
-    seekFile(handle, pos) { this.bonobo.files.seekFile(handle, pos); }
-    eof(handle) { return this.bonobo.files.eof(handle); }
+    openFile(path) {
+        const buffer = this.bonobo.utils.vfs.getBuffer(this._resolvePath(path));
+        if (!buffer) return 0;
+        const stream = new FileStream(buffer);
+        const id = this.nextFileId++;
+        this.files.set(id, stream);
+        return id;
+    }
+
+    closeFile(handle) { this.files.delete(handle); }
+    readFile(handle) { return this.files.get(handle)?.readLine() || ""; }
+    writeFile(handle, txt) { this.files.get(handle)?.writeLine(txt); }
+    filePos(handle) { return this.files.get(handle)?.pos || 0; }
+    seekFile(handle, pos) { this.files.get(handle)?.seek(pos); }
+    eof(handle) { 
+        const s = this.files.get(handle);
+        return s ? s.eof : true;
+    }
     
-    readDir(path) { return this.bonobo.files.readDir(this._resolvePath(path)); }
-    nextFile(handle) { return this.bonobo.files.nextFile(handle); }
-    closeDir(handle) { this.bonobo.files.closeDir(handle); }
-    currentDir() { return this.bonobo.files.currentDir(); }
-    changeDir(path) { return this.bonobo.files.changeDir(path); }
-    createDir(path) { return this.bonobo.files.createDir(path); }
-    deleteDir(path) { return this.bonobo.files.deleteDir(path); }
-    fileType(path) { return this.bonobo.files.fileType(path); }
-    fileSize(path) { return this.bonobo.files.fileSize(path); }
-    copyFile(src, dest) { return this.bonobo.files.copyFile(src, dest); }
-    deleteFile(path) { return this.bonobo.files.deleteFile(path); }
+    // Directory operations still use bonobo.files as they are high-level VFS tasks
+    readDir(path) { return this.modules.files.readDir(this._resolvePath(path)); }
+    nextFile(handle) { return this.modules.files.nextFile(handle); }
+    closeDir(handle) { this.modules.files.closeDir(handle); }
+    currentDir() { return this.modules.files.currentDir(); }
+    changeDir(path) { return this.modules.files.changeDir(path); }
+    createDir(path) { return this.modules.files.createDir(path); }
+    deleteDir(path) { return this.modules.files.deleteDir(path); }
+    fileType(path) { return this.modules.files.fileType(path); }
+    fileSize(path) { return this.modules.files.fileSize(path); }
+    copyFile(src, dest) { return this.modules.files.copyFile(src, dest); }
+    deleteFile(path) { return this.modules.files.deleteFile(path); }
+
+    readInt(handle) { return this.files.get(handle)?.readInt() || 0; }
+    writeInt(handle, val) { this.files.get(handle)?.writeInt(val); }
+    readShort(handle) { return this.files.get(handle)?.readShort() || 0; }
+    writeShort(handle, val) { this.files.get(handle)?.writeShort(val); }
+    readFloat(handle) { return this.files.get(handle)?.readFloat() || 0.0; }
+    writeFloat(handle, val) { this.files.get(handle)?.writeFloat(val); }
+    readByte(handle) { return this.files.get(handle)?.readByte() || 0; }
+    writeByte(handle, val) { this.files.get(handle)?.writeByte(val); }
+    readString(handle) { return this.files.get(handle)?.readString() || ""; }
+    writeString(handle, val) { this.files.get(handle)?.writeString(val); }
+
+    // ==========================================
+    // BANKS
+    // ==========================================
+
+    createBank(size) {
+        const bank = new Bank(size);
+        const id = this.nextBankId++;
+        this.banks.set(id, bank);
+        return id;
+    }
+
+    freeBank(handle) { this.banks.delete(handle); }
+    bankSize(handle) { return this.banks.get(handle)?.size || 0; }
+    resizeBank(handle, size) { this.banks.get(handle)?.resize(size); }
+
+    peekByte(handle, offset) { return this.banks.get(handle)?.peekByte(offset) || 0; }
+    pokeByte(handle, offset, val) { this.banks.get(handle)?.pokeByte(offset, val); }
+    peekShort(handle, offset) { return this.banks.get(handle)?.peekShort(offset) || 0; }
+    pokeShort(handle, offset, val) { this.banks.get(handle)?.pokeShort(offset, val); }
+    peekInt(handle, offset) { return this.banks.get(handle)?.peekInt(offset) || 0; }
+    pokeInt(handle, offset, val) { this.banks.get(handle)?.pokeInt(offset, val); }
+    peekFloat(handle, offset) { return this.banks.get(handle)?.peekFloat(offset) || 0.0; }
+    pokeFloat(handle, offset, val) { this.banks.get(handle)?.pokeFloat(offset, val); }
+
+    copyBank(srcHandle, srcOffset, destHandle, destOffset, count) {
+        const src = this.banks.get(srcHandle);
+        const dest = this.banks.get(destHandle);
+        if (src && dest) dest.copy(src, srcOffset, destOffset, count);
+    }
 
     // ==========================================
     // TIME / SYSTEM
     // ==========================================
 
     millisecs() {
-        return this.bonobo.time.millisecs();
+        return this.modules.time.millisecs();
     }
 
     // ==========================================
     // MATH & STRING (Wrappers)
     // ==========================================
 
-    sin(a) { return this.bonobo.math.sin(a); }
-    cos(a) { return this.bonobo.math.cos(a); }
-    tan(a) { return this.bonobo.math.tan(a); }
-    asin(v) { return this.bonobo.math.asin(v); }
-    acos(v) { return this.bonobo.math.acos(v); }
-    atan(v) { return this.bonobo.math.atan(v); }
-    atan2(y, x) { return this.bonobo.math.atan2(y, x); }
-    sqr(v) { return this.bonobo.math.sqr(v); }
-    floor(v) { return this.bonobo.math.floor(v); }
-    ceil(v) { return this.bonobo.math.ceil(v); }
-    abs(v) { return this.bonobo.math.abs(v); }
-    sgn(v) { return this.bonobo.math.sgn(v); }
-    int(v) { return this.bonobo.math.int(v); }
-    float(v) { return this.bonobo.math.float(v); }
-    rand(min, max) { return this.bonobo.math.rand(min, max); }
-    rnd(min, max) { return this.bonobo.math.rnd(min, max); }
-    max(...args) { return this.bonobo.math.max(...args); }
-    min(...args) { return this.bonobo.math.min(...args); }
+    sin(a) { return this.modules.math.sin(a); }
+    cos(a) { return this.modules.math.cos(a); }
+    tan(a) { return this.modules.math.tan(a); }
+    asin(v) { return this.modules.math.asin(v); }
+    acos(v) { return this.modules.math.acos(v); }
+    atan(v) { return this.modules.math.atan(v); }
+    atan2(y, x) { return this.modules.math.atan2(y, x); }
+    sqr(v) { return this.modules.math.sqr(v); }
+    floor(v) { return this.modules.math.floor(v); }
+    ceil(v) { return this.modules.math.ceil(v); }
+    abs(v) { return this.modules.math.abs(v); }
+    sgn(v) { return this.modules.math.sgn(v); }
+    int(v) { return this.modules.math.int(v); }
+    float(v) { return this.modules.math.float(v); }
+    rand(min, max) { return this.modules.math.rand(min, max); }
+    rnd(min, max) { return this.modules.math.rnd(min, max); }
+    seedRnd(seed) { this.modules.math.seedRnd(seed); }
+    rndSeed() { return this.modules.math.seed; }
+    max(...args) { return this.modules.math.max(...args); }
+    min(...args) { return this.modules.math.min(...args); }
 
-    len(s) { return this.bonobo.str.len(s); }
-    left(s, n) { return this.bonobo.str.left(s, n); }
-    right(s, n) { return this.bonobo.str.right(s, n); }
-    mid(s, start, count) { return this.bonobo.str.mid(s, start, count); }
-    upper(s) { return this.bonobo.str.upper(s); }
-    lower(s) { return this.bonobo.str.lower(s); }
-    trim(s) { return this.bonobo.str.trim(s); }
-    replace(s, f, r) { return this.bonobo.str.replace(s, f, r); }
-    instr(s, f, start) { return this.bonobo.str.instr(s, f, start); }
-    asc(s) { return this.bonobo.str.asc(s); }
-    chr(c) { return this.bonobo.str.chr(c); }
-    hex(v) { return this.bonobo.str.hex(v); }
-    bin(v) { return this.bonobo.str.bin(v); }
-    repeat(s, n) { return this.bonobo.str.repeat(s, n); }
+    len(s) { return this.modules.str.len(s); }
+    left(s, n) { return this.modules.str.left(s, n); }
+    right(s, n) { return this.modules.str.right(s, n); }
+    mid(s, start, count) { return this.modules.str.mid(s, start, count); }
+    upper(s) { return this.modules.str.upper(s); }
+    lower(s) { return this.modules.str.lower(s); }
+    trim(s) { return this.modules.str.trim(s); }
+    replace(s, f, r) { return this.modules.str.replace(s, f, r); }
+    instr(s, f, start) { return this.modules.str.instr(s, f, start); }
+    asc(s) { return this.modules.str.asc(s); }
+    chr(c) { return this.modules.str.chr(c); }
+    hex(v) { return this.modules.str.hex(v); }
+    bin(v) { return this.modules.str.bin(v); }
+    repeat(s, n) { return this.modules.str.repeat(s, n); }
 
     // ==========================================
     // COLLISION
     // ==========================================
     
-    rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2) { return this.bonobo.collision.rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2); }
-    imagesOverlap(h1, x1, y1, h2, x2, y2) { return this.bonobo.collision.imagesOverlap(this.images.get(h1), x1, y1, this.images.get(h2), x2, y2); }
-    imagesCollide(h1, x1, y1, f1, h2, x2, y2, f2) { return this.bonobo.collision.imagesCollide(this.images.get(h1), x1, y1, f1, this.images.get(h2), x2, y2, f2); }
-    imageRectCollide(h, x, y, f, rx, ry, rw, rh) { return this.bonobo.collision.imageRectCollide(this.images.get(h), x, y, rx, ry, rw, rh); }
+    rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2) { return this.modules.collision.rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2); }
+    imagesOverlap(h1, x1, y1, h2, x2, y2) { return this.modules.collision.imagesOverlap(this.images.get(h1), x1, y1, this.images.get(h2), x2, y2); }
+    imagesCollide(h1, x1, y1, f1, h2, x2, y2, f2) { return this.modules.collision.imagesCollide(this.images.get(h1), x1, y1, f1, this.images.get(h2), x2, y2, f2); }
+    imageRectCollide(h, x, y, f, rx, ry, rw, rh) { return this.modules.collision.imageRectCollide(this.images.get(h), x, y, rx, ry, rw, rh); }
 
     // ==========================================
     // FONT
     // ==========================================
 
     loadFont(path, name) { 
-        const font = this.bonobo.font.load(path, name);
+        const font = this.modules.font.load(path, name);
         const id = this.nextFontId++;
         this.fonts.set(id, font);
         return id;
     }
     setFont(handle, size, bold, italic) { 
         const font = this.fonts.get(handle);
-        if (font) this.bonobo.font.set(font, size, bold, italic); 
+        if (font) this.modules.font.set(font, size, bold, italic); 
     }
-    stringWidth(txt) { return this.bonobo.font.width(txt); }
+    stringWidth(txt) { return this.modules.font.width(txt); }
 
     // ==========================================
     // DATA & TYPES (Compiler Support)
@@ -545,21 +615,52 @@ export class BlitzRuntime {
         }
     }
 
-    typeAdd(typeName, obj) {
-        const t = typeName.toLowerCase();
-        if (!this.typeLists.has(t)) this.typeLists.set(t, new Set());
-        this.typeLists.get(t).add(obj);
-    }
-
-    typeEach(typeName) {
-        const t = typeName.toLowerCase();
-        if (this.typeLists.has(t)) return Array.from(this.typeLists.get(t));
-        return [];
-    }
-
     deleteObj(obj) {
-        for (const set of this.typeLists.values()) {
-            if (set.delete(obj)) return;
+        if (!obj || !obj.constructor || !obj.constructor.list) return;
+        const idx = obj.constructor.list.indexOf(obj);
+        if (idx !== -1) obj.constructor.list.splice(idx, 1);
+    }
+
+    first(typeObj) {
+        return (typeObj && typeObj.list) ? typeObj.list[0] : null;
+    }
+
+    last(typeObj) {
+        return (typeObj && typeObj.list) ? typeObj.list[typeObj.list.length - 1] : null;
+    }
+
+    after(obj) {
+        if (!obj || !obj.constructor || !obj.constructor.list) return null;
+        const list = obj.constructor.list;
+        const idx = list.indexOf(obj);
+        return (idx !== -1 && idx < list.length - 1) ? list[idx + 1] : null;
+    }
+
+    before(obj) {
+        if (!obj || !obj.constructor || !obj.constructor.list) return null;
+        const list = obj.constructor.list;
+        const idx = list.indexOf(obj);
+        return (idx > 0) ? list[idx - 1] : null;
+    }
+
+    insert(obj, target, isBefore) {
+        if (!obj || !target || obj.constructor !== target.constructor) return;
+        const list = obj.constructor.list;
+        if (!list) return;
+
+        const objIdx = list.indexOf(obj);
+        if (objIdx !== -1) list.splice(objIdx, 1);
+
+        const targetIdx = list.indexOf(target);
+        if (targetIdx === -1) {
+            list.push(obj);
+            return;
+        }
+
+        if (isBefore) {
+            list.splice(targetIdx, 0, obj);
+        } else {
+            list.splice(targetIdx + 1, 0, obj);
         }
     }
 

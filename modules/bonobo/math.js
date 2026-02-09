@@ -4,6 +4,19 @@
 export class Maths{
     constructor(bonobo){
         this.bonobo = bonobo;
+        this.seed = 12345; // Standard-Seed
+    }
+
+    /**
+     * Sets the seed for the random number generator.
+     */
+    seedRnd(seed) {
+        this.seed = seed;
+    }
+
+    _next() {
+        this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
+        return this.seed / 0x80000000;
     }
 
     /**
@@ -13,9 +26,11 @@ export class Maths{
      * @returns {number}
      */
     rand(min, max){
-        min = Math.ceil(min);
-        max = Math.floor(max);
-        return Math.floor(Math.random() * (max - min + 1)) + min;
+        if (max === undefined) {
+            max = min;
+            min = 1;
+        }
+        return Math.floor(min + this._next() * (max - min + 1));
     }
 
     /**
@@ -118,6 +133,13 @@ export class Maths{
     }
 
     /**
+     * Returns the base-10 logarithm of a value.
+     */
+    log10(v) {
+        return Math.log10(v);
+    }
+
+    /**
      * Returns the absolute value.
      * @param {number} v Value.
      * @returns {number}
@@ -144,9 +166,10 @@ export class Maths{
      */
     rnd(min, max){
         if (max === undefined) {
-            return Math.random() * min;
+            max = min;
+            min = 0;
         }
-        return Math.random() * (max - min) + min;
+        return min + this._next() * (max - min);
     }
 
     /**
